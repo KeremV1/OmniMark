@@ -16,3 +16,6 @@ Thumbs.db
 # Agent workspaces
 .worktrees/
 .superpowers/
+
+# Downloaded native libraries
+vendor/
