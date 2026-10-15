@@ -1,0 +1,17 @@
+# Reference source (Microsoft MarkItDown) — read-only, not part of this repo
+markitdown-main/
+
+# Rust
+target/
+
+# Node / frontend
+node_modules/
+dist/
+
+# Tauri generated
+src-tauri/gen/schemas/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.log
