@@ -2,19 +2,21 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** M1 kodlaması sürüyor — çekirdek kütüphanenin ilk 3 görevi tamamlandı. Henüz çalışan bir uygulama yok.
+> **Durum:** M1 kodlaması sürüyor (3/19 görev). Henüz çalışan bir uygulama yok.
 
 ## Kaldığımız yer
 
-- **Son durum (2026-10-15):** Görev 1-3 / 19 tamamlandı. Rust workspace, hata tipleri, tür tespiti ve çıktı adlandırma hazır; 23 test geçiyor.
-- **Kod:** [`m1` dalı](https://github.com/KeremV1/OmniMark/tree/m1). `main`'e M1 bitince birleştirilecek.
-- **Sıradaki:** Görev 4-5 (kayıt defteri, CLI, golden testler), ardından dönüştürücüler.
-- **Ayrıntı:** [HANDOFF.md](HANDOFF.md), [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md), [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md).
+**Geldiğimiz nokta (2026-10-15):**
+- **Hazırlık:** araştırma, tasarım ve logo tamamlandı; 19 görevlik uygulama planı yazıldı.
+- **Kod:** Görev 1-3 tamamlandı ve incelendi: Rust workspace, hata tipleri, tür tespiti, karakter kodlaması, görsel çıkarma, çakışmasız çıktı adlandırma. 23 test geçiyor.
+- **Dal:** kod [`m1` dalında](https://github.com/KeremV1/OmniMark/tree/m1); M1 bitince `main`'e birleşecek.
 
-- **Platformlar:** Windows, macOS, Linux
-- **Teknoloji:** Rust + [Tauri 2](https://v2.tauri.app/), arayüz HTML/CSS/TypeScript
-- **Hedefler:** Düşük RAM kullanımı, hızlı açılış, küçük kurulum boyutu
-- **Referans:** Microsoft'un açık kaynaklı Python kütüphanesi [MarkItDown](https://github.com/microsoft/markitdown) (MIT)
+**Sıradaki iş:**
+1. İncelemeden gelen düzeltme: görsel bağlantılarında `% # ? [ ]` karakterlerinin kodlanması.
+2. Görev 4-5: dönüştürücü kayıt defteri, CLI, golden test altyapısı, pdfium indirme betiği.
+3. Dönüştürücüler (TXT/JSON, CSV, HTML, Excel, Word, PowerPoint, PDF) ve masaüstü arayüzü.
+
+Ayrıntı: [HANDOFF.md](HANDOFF.md) · [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md) · [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)
 
 ## Desteklenecek formatlar
 
