@@ -2,7 +2,14 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** M1 tasarımı tamamlandı ([spesifikasyon](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)); uygulama planı hazır ([plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md)), kodlama başlıyor. Henüz çalışan bir sürüm yok.
+> **Durum:** M1 kodlaması sürüyor — çekirdek kütüphanenin ilk 3 görevi tamamlandı. Henüz çalışan bir uygulama yok.
+
+## Kaldığımız yer
+
+- **Son durum (2026-10-15):** Görev 1-3 / 19 tamamlandı. Rust workspace, hata tipleri, tür tespiti ve çıktı adlandırma hazır; 23 test geçiyor.
+- **Kod:** [`m1` dalı](https://github.com/KeremV1/OmniMark/tree/m1). `main`'e M1 bitince birleştirilecek.
+- **Sıradaki:** Görev 4-5 (kayıt defteri, CLI, golden testler), ardından dönüştürücüler.
+- **Ayrıntı:** [HANDOFF.md](HANDOFF.md), [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md), [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md).
 
 - **Platformlar:** Windows, macOS, Linux
 - **Teknoloji:** Rust + [Tauri 2](https://v2.tauri.app/), arayüz HTML/CSS/TypeScript
