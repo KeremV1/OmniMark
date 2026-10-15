@@ -12,3 +12,7 @@ src-tauri/gen/schemas/
 .DS_Store
 Thumbs.db
 *.log
+
+# Agent workspaces
+.worktrees/
+.superpowers/
