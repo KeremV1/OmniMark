@@ -2,7 +2,7 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** M1 tasarımı tamamlandı ([spesifikasyon](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)); uygulama planı hazırlanıyor. Henüz çalışan bir sürüm yok.
+> **Durum:** M1 tasarımı tamamlandı ([spesifikasyon](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)); uygulama planı hazır ([plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md)), kodlama başlıyor. Henüz çalışan bir sürüm yok.
 
 - **Platformlar:** Windows, macOS, Linux
 - **Teknoloji:** Rust + [Tauri 2](https://v2.tauri.app/), arayüz HTML/CSS/TypeScript
