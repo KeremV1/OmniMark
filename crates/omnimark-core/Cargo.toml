@@ -9,3 +9,6 @@ publish.workspace = true
 [dependencies]
 thiserror.workspace = true
 serde.workspace = true
+infer.workspace = true
+chardetng.workspace = true
+encoding_rs.workspace = true
