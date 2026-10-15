@@ -2,7 +2,7 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** Araştırma tamamlandı, tasarım aşamasında. Henüz çalışan bir sürüm yok.
+> **Durum:** M1 tasarımı tamamlandı ([spesifikasyon](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)); uygulama planı hazırlanıyor. Henüz çalışan bir sürüm yok.
 
 - **Platformlar:** Windows, macOS, Linux
 - **Teknoloji:** Rust + [Tauri 2](https://v2.tauri.app/), arayüz HTML/CSS/TypeScript
@@ -62,11 +62,12 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 
 ## Geliştirme
 
-Henüz kod yok. Gereksinimler (planlanan):
+Henüz kod yok. Gereksinimler:
 
-- Rust (stable, MSVC toolchain, Windows'ta)
-- Windows için Visual Studio Build Tools (C++ iş yükü) ve WebView2
+- Rust 1.90+ (Windows'ta MSVC toolchain)
+- Windows için Visual Studio 2022 Build Tools (C++ iş yükü) ve WebView2
 - Node.js 20+
+- PDF için pdfium: `scripts/fetch-pdfium` betiğiyle sabit bir sürümden indirilecek ([bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries))
 
 Araştırma notları:
 
