@@ -2,7 +2,7 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** Planlama ve araştırma aşaması. Henüz çalışan bir sürüm yok.
+> **Durum:** Araştırma tamamlandı, tasarım aşamasında. Henüz çalışan bir sürüm yok.
 
 - **Platformlar:** Windows, macOS, Linux
 - **Teknoloji:** Rust + [Tauri 2](https://v2.tauri.app/), arayüz HTML/CSS/TypeScript
@@ -68,7 +68,13 @@ Henüz kod yok. Gereksinimler (planlanan):
 - Windows için Visual Studio Build Tools (C++ iş yükü) ve WebView2
 - Node.js 20+
 
-Araştırma notları [docs/research/](docs/research/) klasöründe.
+Araştırma notları:
+
+- [Rust kütüphaneleri](docs/research/rust-kutuphaneleri.md): format başına kütüphane karşılaştırması ve öneriler
+- [Tauri 2 rehberi](docs/research/tauri2-rehberi.md): kurulum, sürükle-bırak, ilerleme, paketleme
+- [MarkItDown davranış spesifikasyonu](docs/research/markitdown-davranis-spec.md): format başına çıktı kuralları ve golden test listesi
+
+Golden test dosyaları [tests/fixtures/markitdown/](tests/fixtures/markitdown/) altında (MarkItDown 0.1.8, MIT).
 
 ## Teşekkür
 

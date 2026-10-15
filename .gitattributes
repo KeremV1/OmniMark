@@ -1,0 +1,18 @@
+* text=auto eol=lf
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.xls binary
+*.pptx binary
+*.jpg binary
+*.png binary
+*.mp3 binary
+*.m4a binary
+*.wav binary
+*.zip binary
+*.epub binary
+*.msg binary
+*.bin binary
+
+# Golden fixtures must stay byte-identical
+tests/fixtures/** -text
