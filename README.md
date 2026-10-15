@@ -58,16 +58,27 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 
 ## Yol haritası
 
-1. Proje iskeleti ve temel arayüz
-2. Sürükle-bırak ve dosya kuyruğu
-3. İlk çalışan Markdown dönüştürme akışı
-4. PDF, DOCX, XLSX, PPTX ve HTML desteği
-5. Görsel metadata ve OCR
-6. Ses transkripsiyonu
-7. Hata yönetimi, testler ve performans iyileştirmeleri
-8. Windows, macOS ve Linux paketleri
+| Aşama | Kapsam | Yol haritası adımları | Durum | İlerleme |
+| --- | --- | --- | --- | --- |
+| **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | 🔄 Sürüyor | 3/19 görev |
+| **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | ⏳ Planlandı | — |
+| **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏳ Planlandı | — |
+| **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans iyileştirmeleri | 7 | ⏳ Planlandı | — |
+| **M5** | Windows, macOS ve Linux kurulum paketleri, imzalama | 8 | ⏳ Planlandı | — |
+
+Yol haritası adımları: **1** proje iskeleti ve temel arayüz · **2** sürükle-bırak ve dosya kuyruğu · **3** ilk çalışan Markdown dönüştürme akışı · **4** PDF, DOCX, XLSX, PPTX ve HTML desteği · **5** görsel metadata ve OCR · **6** ses transkripsiyonu · **7** hata yönetimi, testler ve performans · **8** Windows, macOS ve Linux paketleri.
+
+Durum işaretleri: ✅ tamamlandı · 🔄 sürüyor · ⏳ planlandı.
 
 **Temel ilke:** Önce küçük, çalışan ve güvenilir bir uygulama; ardından formatlar ve gelişmiş özellikler aşamalı olarak eklenir. Tüm platformlarda aynı temel deneyim korunur.
+
+## Platform desteği
+
+| Platform | Geliştirme ve derleme | Otomatik testler (CI) | Kurulum paketi | Durum |
+| --- | --- | --- | --- | --- |
+| **Windows** 10/11 (x64) | ✅ Geliştirme ortamı kurulu, çekirdek testleri geçiyor | ⏳ M1 · Görev 18 | ⏳ M5 · NSIS kurulum (`.exe`) | 🔄 Geliştiriliyor |
+| **macOS** (Apple Silicon ve Intel) | ⏳ CI üzerinde derlenecek | ⏳ M1 · Görev 18 | ⏳ M5 · `.dmg` (imzalama için Apple Developer hesabı gerekir) | ⏳ Planlandı |
+| **Linux** (x64; Ubuntu 22.04+ ve benzerleri) | ⏳ CI üzerinde derlenecek | ⏳ M1 · Görev 18 | ⏳ M5 · AppImage ve `.deb` | ⏳ Planlandı |
 
 ## Geliştirme
 
