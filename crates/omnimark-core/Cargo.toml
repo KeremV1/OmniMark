@@ -12,3 +12,6 @@ serde.workspace = true
 infer.workspace = true
 chardetng.workspace = true
 encoding_rs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
