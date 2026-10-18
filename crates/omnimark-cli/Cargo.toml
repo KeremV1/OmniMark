@@ -1,0 +1,19 @@
+[package]
+name = "omnimark-cli"
+description = "Command line front end for OmniMark"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "omnimark"
+path = "src/main.rs"
+
+[dependencies]
+omnimark-core = { path = "../omnimark-core" }
+clap.workspace = true
+
+
+[dev-dependencies]
+tempfile.workspace = true

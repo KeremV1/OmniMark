@@ -1,0 +1,3 @@
+[
+  { "file": "random.bin", "expect_error": "unsupported", "note": "Binary noise with an unknown extension." }
+]

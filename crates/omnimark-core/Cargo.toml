@@ -17,3 +17,5 @@ encoding_rs.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+serde_json.workspace = true
+regex.workspace = true
