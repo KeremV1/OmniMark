@@ -2,7 +2,7 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** M1 kodlaması sürüyor (17/19 görev). Tüm M1 dönüştürücüleri, Word formülleri, Tauri arka ucu, uygulama simgeleri ve üç platformda CI hazır; masaüstü arayüzü yazılıyor.
+> **Durum:** M1 kodu tamamlandı (19/19 görev, `m1` dalında). Tüm dalın son incelemesi yapılıyor; ardından `main`'e birleşecek.
 
 ## Kaldığımız yer
 
@@ -11,14 +11,16 @@
 - **Dönüştürücüler (Görev 6-10, 12-13):** TXT/MD/JSON, CSV (`;`/sekme tespiti), HTML, Excel (XLSX/XLS/ODS), Word (başlık, liste, tablo, görsel, dipnot), PowerPoint (slayt, tablo, grafik, not), PDF (pdfium; tablo ve form tespiti).
 - **Word formülleri (Görev 11):** Office Math → LaTeX (`$…$`, `$$…$$`).
 - **Masaüstü (Görev 14, 15, 17):** Tauri 2 kabuğu, paralel dönüştürme kuyruğu, ilerleme olayları, ayarlar; arayüz çekirdeği (kuyruk, Türkçe/İngilizce metinler); logodan üretilen uygulama simgeleri. Arayüz yalnızca çıktı klasöründeki `.md` dosyalarını okuyabilir.
+- **Arayüz (Görev 16):** dosya kuyruğu, sürükle-bırak, ilerleme çubukları, filtreler, Markdown önizleme (görünüm/kaynak), ayarlar, klavye kısayolları; açık/koyu tema; Türkçe/İngilizce.
 - **CI (Görev 18):** her push'ta Windows, macOS ve Linux'ta otomatik test ([Actions](https://github.com/KeremV1/OmniMark/actions)).
+- **Ölçümler (Görev 19, Windows):** kurulum dosyası **5,4 MB** (hedef < 15 MB ✅) · pencere açılışı **59 ms** (hedef < 1 s ✅) · boşta RAM **344 MB** (hedef < 100 MB ❌; uygulama 27,5 MB, geri kalanı WebView2) · 131 Rust + 16 arayüz testi geçiyor. Ayrıntı: `docs/m1-olcumler.md` (`m1` dalında).
 - **Güvenlik:** kötü niyetli dosyalara karşı sınırlar eklendi (çok derin HTML, dev tablo ve grafik verisi, harici bağlantılar asla açılmaz). 121 test geçiyor.
 - **Dal:** kod [`m1` dalında](https://github.com/KeremV1/OmniMark/tree/m1); M1 bitince `main`'e birleşecek.
 
 **Sıradaki iş:**
-1. Arayüz: pencere düzeni, sürükle-bırak, önizleme, ayarlar (Görev 16, yazılıyor).
-2. Ölçüm (kurulum boyutu, açılış süresi, RAM), README ve M1 kapanışı (Görev 19).
-3. Tüm dalın son incelemesi ve `m1` → `main` birleştirmesi.
+1. Tüm dalın son incelemesi (sürüyor) ve bulguların düzeltilmesi.
+2. `m1` → `main` birleştirmesi; M1 kapanışı.
+3. RAM hedefinin değerlendirilmesi (WebView2 kaynaklı) ve M2 (görsel metadata + OCR) planı.
 
 Ayrıntı: [HANDOFF.md](HANDOFF.md) · [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md) · [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)
 
@@ -64,7 +66,7 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 
 | Aşama | Kapsam | Yol haritası adımları | Durum | İlerleme |
 | --- | --- | --- | --- | --- |
-| **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | 🔄 Sürüyor | 17/19 görev |
+| **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | 🔄 Son inceleme | 19/19 görev |
 | **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | ⏳ Planlandı | — |
 | **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏳ Planlandı | — |
 | **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans iyileştirmeleri | 7 | ⏳ Planlandı | — |
