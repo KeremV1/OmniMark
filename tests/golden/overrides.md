@@ -5,3 +5,4 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 
 | Fixture | MarkItDown beklentisi | OmniMark beklentisi | Gerekçe |
 | --- | --- | --- | --- |
+| (satır içi testler) | `;` ayrılmış CSV tek sütun | `,` `;` sekme otomatik tespit | Türkçe Excel CSV'yi `;` ile kaydeder |
