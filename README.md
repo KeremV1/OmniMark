@@ -2,7 +2,7 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** M1 kodu tamamlandı (19/19 görev, `m1` dalında). Tüm dalın son incelemesi yapılıyor; ardından `main`'e birleşecek.
+> **Durum:** M1 kodu tamamlandı ve son incelemeden geçti (19/19 görev, `m1` dalında); `main`'e birleştirme onayı bekleniyor.
 
 ## Kaldığımız yer
 
@@ -13,13 +13,13 @@
 - **Masaüstü (Görev 14, 15, 17):** Tauri 2 kabuğu, paralel dönüştürme kuyruğu, ilerleme olayları, ayarlar; arayüz çekirdeği (kuyruk, Türkçe/İngilizce metinler); logodan üretilen uygulama simgeleri. Arayüz yalnızca çıktı klasöründeki `.md` dosyalarını okuyabilir.
 - **Arayüz (Görev 16):** dosya kuyruğu, sürükle-bırak, ilerleme çubukları, filtreler, Markdown önizleme (görünüm/kaynak), ayarlar, klavye kısayolları; açık/koyu tema; Türkçe/İngilizce.
 - **CI (Görev 18):** her push'ta Windows, macOS ve Linux'ta otomatik test ([Actions](https://github.com/KeremV1/OmniMark/actions)).
-- **Ölçümler (Görev 19, Windows):** kurulum dosyası **5,4 MB** (hedef < 15 MB ✅) · pencere açılışı **59 ms** (hedef < 1 s ✅) · boşta RAM **344 MB** (hedef < 100 MB ❌; uygulama 27,5 MB, geri kalanı WebView2) · 131 Rust + 16 arayüz testi geçiyor. Ayrıntı: `docs/m1-olcumler.md` (`m1` dalında).
-- **Güvenlik:** kötü niyetli dosyalara karşı sınırlar eklendi (çok derin HTML, dev tablo ve grafik verisi, harici bağlantılar asla açılmaz). 121 test geçiyor.
+- **Ölçümler (Görev 19, Windows):** kurulum dosyası **5,4 MB** (hedef < 15 MB ✅) · pencere açılışı **59 ms** (hedef < 1 s ✅) · boşta RAM **170 MB** private / 347 MB WorkingSet (hedef < 100 MB ❌; uygulama süreci 5,5 MB, geri kalanı WebView2) · 144 Rust + 17 arayüz testi geçiyor. Ayrıntı: `docs/m1-olcumler.md` (`m1` dalında).
+- **Güvenlik:** kötü niyetli dosyalara karşı sınırlar eklendi (çok derin HTML, dev tablo/grafik/sayfa verisi, zip öğe boyutu, XML düğüm sayısı; harici bağlantılar asla açılmaz). Son incelemede bulunan bellek tüketme açıkları kapatıldı. 121 test geçiyor.
 - **Dal:** kod [`m1` dalında](https://github.com/KeremV1/OmniMark/tree/m1); M1 bitince `main`'e birleşecek.
 
 **Sıradaki iş:**
-1. Tüm dalın son incelemesi (sürüyor) ve bulguların düzeltilmesi.
-2. `m1` → `main` birleştirmesi; M1 kapanışı.
+1. `m1` → `main` birleştirmesi (son inceleme ve düzeltmeleri bitti); M1 kapanışı.
+2. Gerçek kullanımla deneme: sürükle-bırak, önizleme, kopyalama.
 3. RAM hedefinin değerlendirilmesi (WebView2 kaynaklı) ve M2 (görsel metadata + OCR) planı.
 
 Ayrıntı: [HANDOFF.md](HANDOFF.md) · [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md) · [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)
