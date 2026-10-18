@@ -1,0 +1,12 @@
+[
+  {
+    "file": "test.xlsx",
+    "include": ["## Sheet1", "## 09060124-b5e7-4717-9d07-3c046eb", "6ff4173b-42a5-4784-9b19-f49caff4d93d", "affc7dad-52dc-4b98-9b5d-51e65d8a8ad0", "| Alpha | Beta | Gamma | Delta |"],
+    "exclude": ["NaN", "Unnamed:", ".0 |"]
+  },
+  {
+    "file": "test.xls",
+    "include": ["## 09060124-b5e7-4717-9d07-3c046eb", "6ff4173b-42a5-4784-9b19-f49caff4d93d", "affc7dad-52dc-4b98-9b5d-51e65d8a8ad0"],
+    "exclude": ["NaN", "Unnamed:"]
+  }
+]

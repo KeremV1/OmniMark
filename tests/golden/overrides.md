@@ -7,3 +7,4 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 | --- | --- | --- | --- |
 | test.json, json_late_non_ascii.json | JSON metni olduğu gibi | ```` ```json ```` kod bloğu içinde | Markdown görüntüleyicilerde okunabilirlik |
 | (satır içi testler) | `;` ayrılmış CSV tek sütun | `,` `;` sekme otomatik tespit | Türkçe Excel CSV'yi `;` ile kaydeder |
+| test.xlsx, test.xls | Boş hücre `NaN`, `Unnamed: N`, `100.0` | Boş hücre boş, tam sayılar `.0`'sız | pandas artefaktları |
