@@ -55,6 +55,8 @@ pub(crate) struct DocxParts<'a> {
     endnotes: Option<Vec<u8>>,
     /// Part path → stored link target, so a repeated picture is written once.
     image_cache: HashMap<String, Option<String>>,
+    /// Non-fatal problems found while loading parts; moved into the document by `render_body`.
+    warnings: Vec<String>,
 }
 
 impl<'a> DocxParts<'a> {
@@ -67,6 +69,7 @@ impl<'a> DocxParts<'a> {
             footnotes: None,
             endnotes: None,
             image_cache: HashMap::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -76,10 +79,10 @@ impl<'a> DocxParts<'a> {
             parts.add_rels(&rels);
         }
         if let Some(xml) = archive.read("word/styles.xml")? {
-            parts.styles = Styles::parse(&xml);
+            parts.set_styles(&xml);
         }
         if let Some(xml) = archive.read("word/numbering.xml")? {
-            parts.numbering = Numbering::parse(&xml);
+            parts.set_numbering(&xml);
         }
         parts.footnotes = archive.read("word/footnotes.xml")?;
         parts.endnotes = archive.read("word/endnotes.xml")?;
@@ -97,20 +100,41 @@ impl<'a> DocxParts<'a> {
     pub(crate) fn from_xml(styles: Option<&[u8]>, numbering: Option<&[u8]>) -> Self {
         let mut parts = Self::new();
         if let Some(xml) = styles {
-            parts.styles = Styles::parse(xml);
+            parts.set_styles(xml);
         }
         if let Some(xml) = numbering {
-            parts.numbering = Numbering::parse(xml);
+            parts.set_numbering(xml);
         }
         parts
     }
 
-    /// Lenient: a malformed relationships part only loses links and images.
+    fn set_styles(&mut self, xml: &[u8]) {
+        self.styles = Styles::parse(xml);
+        if self.styles.incomplete {
+            self.warnings
+                .push("Styles could not be fully read; headings may be missing.".into());
+        }
+    }
+
+    fn set_numbering(&mut self, xml: &[u8]) {
+        self.numbering = Numbering::parse(xml);
+        if self.numbering.incomplete {
+            self.warnings
+                .push("Numbering could not be fully read; list markers may be wrong.".into());
+        }
+    }
+
+    /// Lenient: a malformed relationships part only loses links and images (with a warning).
     pub(crate) fn add_rels(&mut self, xml: &[u8]) {
-        if let Ok(rels) = parse_relationships(xml) {
-            for rel in rels {
-                self.rels.insert(rel.id.clone(), rel);
+        match parse_relationships(xml) {
+            Ok(rels) => {
+                for rel in rels {
+                    self.rels.insert(rel.id.clone(), rel);
+                }
             }
+            Err(error) => self.warnings.push(format!(
+                "Relationships could not be read; links and images are lost ({error})."
+            )),
         }
     }
 

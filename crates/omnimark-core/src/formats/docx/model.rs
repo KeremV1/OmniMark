@@ -98,6 +98,7 @@ pub(super) struct Table {
     pub(super) rows: Vec<Vec<String>>,
     pub(super) row: Vec<String>,
     pub(super) cell: Option<Cell>,
+    pub(super) cells: usize,
 }
 
 #[derive(Default)]

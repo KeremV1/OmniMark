@@ -27,6 +27,10 @@ const SKIPPED: &[&str] = &[
     "sectPrChange",
 ];
 const CANCEL_EVERY: usize = 200;
+/// Caps against tiny XML that expands into huge tables (`w:gridSpan` in the thousands).
+const MAX_TABLE_COLUMNS: usize = 200;
+const MAX_TABLE_CELLS: usize = 100_000;
+const TABLE_WARNING: &str = "Large table truncated.";
 
 pub(crate) fn render_body(
     document_xml: &[u8],
@@ -34,6 +38,7 @@ pub(crate) fn render_body(
     ctx: &mut ConvertContext<'_>,
     doc: &mut Document,
 ) -> Result<String> {
+    doc.warnings.append(&mut parts.warnings);
     let mut engine = Engine::new(document_xml, parts, ctx, doc, None);
     engine.run()?;
     let mut out = join_blocks(&engine.blocks);
@@ -44,8 +49,13 @@ pub(crate) fn render_body(
     ] {
         let Some(xml) = xml else { continue };
         let mut engine = Engine::new(&xml, parts, ctx, doc, Some(prefix));
-        engine.run()?;
-        definitions.append(&mut engine.notes);
+        match engine.run() {
+            Ok(()) => definitions.append(&mut engine.notes),
+            Err(ConvertError::Cancelled) => return Err(ConvertError::Cancelled),
+            Err(error) => doc.warn(format!(
+                "Notes could not be read and were skipped ({error})."
+            )),
+        }
     }
     for definition in definitions {
         if !out.is_empty() {
@@ -227,15 +237,15 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
                     ..Math::default()
                 });
             }
-            _ => self.open_paragraph_part(e, name, local),
+            _ => self.open_paragraph_part(e, name, local)?,
         }
         Ok(())
     }
 
     /// Elements that only matter inside the paragraph currently being read.
-    fn open_paragraph_part(&mut self, e: &BytesStart<'_>, name: &str, local: &str) {
+    fn open_paragraph_part(&mut self, e: &BytesStart<'_>, name: &str, local: &str) -> Result<()> {
         let Some(para) = self.paras.last_mut() else {
-            return;
+            return Ok(());
         };
         match local {
             "pPr" => para.in_ppr = true,
@@ -298,13 +308,14 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
                     embed: attr(e, "r:id"),
                     link: None,
                 };
-                let markdown = self.image_markdown(&drawing);
+                let markdown = self.image_markdown(&drawing)?;
                 if let Some(para) = self.paras.last_mut() {
                     para.push(Seg::Raw(markdown));
                 }
             }
             _ => {}
         }
+        Ok(())
     }
 
     fn close(&mut self, name: &str, after: usize) -> Result<()> {
@@ -348,20 +359,21 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
             }
             "tc" => self.finish_cell(),
             "tr" => {
+                self.ctx.check_cancel()?;
                 if let Some(table) = self.tables.last_mut() {
                     let row = std::mem::take(&mut table.row);
                     table.rows.push(row);
                 }
             }
             "tbl" => self.finish_table(),
-            _ => self.close_paragraph_part(local),
+            _ => self.close_paragraph_part(local)?,
         }
         Ok(())
     }
 
-    fn close_paragraph_part(&mut self, local: &str) {
+    fn close_paragraph_part(&mut self, local: &str) -> Result<()> {
         let Some(para) = self.paras.last_mut() else {
-            return;
+            return Ok(());
         };
         match local {
             "pPr" => para.in_ppr = false,
@@ -371,7 +383,7 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
             "hyperlink" => para.close_link(),
             "drawing" => {
                 if let Some(drawing) = para.drawing.take() {
-                    let markdown = self.image_markdown(&drawing);
+                    let markdown = self.image_markdown(&drawing)?;
                     if let Some(para) = self.paras.last_mut() {
                         para.push(Seg::Raw(markdown));
                     }
@@ -379,6 +391,7 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
             }
             _ => {}
         }
+        Ok(())
     }
 
     fn finish_math(&mut self, end: usize) {
@@ -493,9 +506,21 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
         } else {
             cell.paragraphs.join(" ")
         };
-        table.row.push(text);
-        for _ in 1..cell.span {
-            table.row.push(String::new());
+        let mut truncated = false;
+        for index in 0..cell.span {
+            if table.row.len() >= MAX_TABLE_COLUMNS || table.cells >= MAX_TABLE_CELLS {
+                truncated = true;
+                break;
+            }
+            table.cells += 1;
+            table.row.push(if index == 0 {
+                text.clone()
+            } else {
+                String::new()
+            });
+        }
+        if truncated && !self.doc.warnings.iter().any(|w| w == TABLE_WARNING) {
+            self.doc.warn(TABLE_WARNING);
         }
     }
 
@@ -538,7 +563,7 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
     }
 
     /// Markdown for a picture. Linked (external) pictures are never opened.
-    fn image_markdown(&mut self, drawing: &Drawing) -> String {
+    fn image_markdown(&mut self, drawing: &Drawing) -> Result<String> {
         let alt = drawing.alt.as_str();
         let rel = |id: &Option<String>| id.as_ref().and_then(|id| self.parts.rels.get(id)).cloned();
         let embedded = rel(&drawing.embed).filter(|r| !r.external);
@@ -548,33 +573,42 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
                 self.doc
                     .warn(format!("Linked image not embedded: {}", linked.target));
             }
-            return image(alt, None);
+            return Ok(image(alt, None));
         };
         if !self.ctx.options.extract_images {
-            return image(alt, None);
+            return Ok(image(alt, None));
         }
         let part = resolve_part(DOCUMENT_PART, &embedded.target);
         if let Some(cached) = self.parts.image_cache.get(&part) {
-            return image(alt, cached.as_deref());
+            return Ok(image(alt, cached.as_deref()));
         }
         let bytes = match self.parts.archive.as_mut().map(|a| a.read(&part)) {
             Some(Ok(Some(bytes))) => bytes,
-            Some(Err(_)) | Some(Ok(None)) => {
-                self.doc.warn(format!("Image could not be read: {part}"));
-                return image(alt, None);
+            Some(Err(ConvertError::Cancelled)) => return Err(ConvertError::Cancelled),
+            Some(Err(error)) => {
+                self.doc
+                    .warn(format!("Image could not be read: {part} ({error})"));
+                return Ok(image(alt, None));
             }
-            None => return image(alt, None),
+            Some(Ok(None)) => {
+                self.doc
+                    .warn(format!("Image not found in document: {part}"));
+                return Ok(image(alt, None));
+            }
+            None => return Ok(image(alt, None)),
         };
         let file_name = part.rsplit('/').next().unwrap_or("image");
         let link = match self.ctx.assets.store(file_name, &bytes) {
             Ok(link) => link,
-            Err(_) => {
-                self.doc.warn(format!("Image could not be saved: {part}"));
+            Err(ConvertError::Cancelled) => return Err(ConvertError::Cancelled),
+            Err(error) => {
+                self.doc
+                    .warn(format!("Image could not be saved: {part} ({error})"));
                 None
             }
         };
         self.parts.image_cache.insert(part, link.clone());
-        image(alt, link.as_deref())
+        Ok(image(alt, link.as_deref()))
     }
 }
 

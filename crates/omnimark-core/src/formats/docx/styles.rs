@@ -17,7 +17,10 @@ struct StyleDef {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct Styles(HashMap<String, StyleDef>);
+pub(crate) struct Styles {
+    defs: HashMap<String, StyleDef>,
+    pub(crate) incomplete: bool,
+}
 
 /// `heading 3` / `Heading3` → 3 (clamped to 6); `Title` → 1.
 fn heading_from_name(name: &str) -> Option<u8> {
@@ -41,7 +44,12 @@ impl Styles {
         let mut reader = reader(xml);
         let mut styles = HashMap::new();
         let mut current: Option<(String, StyleDef)> = None;
-        while let Ok(event) = reader.read_event() {
+        let mut incomplete = false;
+        loop {
+            let Ok(event) = reader.read_event() else {
+                incomplete = true;
+                break;
+            };
             match &event {
                 Event::Eof => break,
                 Event::Start(e) | Event::Empty(e) => {
@@ -70,14 +78,17 @@ impl Styles {
                 _ => {}
             }
         }
-        Self(styles)
+        Self {
+            defs: styles,
+            incomplete,
+        }
     }
 
     /// Heading level for a paragraph style id, following `basedOn` (at most 10 steps).
     pub(crate) fn heading_level(&self, style_id: &str) -> Option<u8> {
         let mut id = style_id;
         for _ in 0..MAX_BASED_ON_STEPS {
-            let Some(def) = self.0.get(id) else {
+            let Some(def) = self.defs.get(id) else {
                 // Unknown style: Word's built-in ids are `Heading1`, `Title`, ...
                 return heading_from_name(id);
             };
@@ -99,6 +110,7 @@ pub(crate) struct Numbering {
     nums: HashMap<String, String>,
     /// (abstract id, level) → `w:numFmt`.
     formats: HashMap<(String, usize), String>,
+    pub(crate) incomplete: bool,
 }
 
 impl Numbering {
@@ -108,7 +120,11 @@ impl Numbering {
         let mut abstract_id: Option<String> = None;
         let mut level: Option<usize> = None;
         let mut num_id: Option<String> = None;
-        while let Ok(event) = reader.read_event() {
+        loop {
+            let Ok(event) = reader.read_event() else {
+                out.incomplete = true;
+                break;
+            };
             match &event {
                 Event::Eof => break,
                 Event::Start(e) | Event::Empty(e) => {
@@ -152,11 +168,11 @@ impl Numbering {
         out
     }
 
-    /// Everything except an explicit non-bullet `numFmt` is treated as a bullet list.
+    /// Any explicit `numFmt` other than `bullet` is numbered; a missing definition falls back to a bullet.
     pub(crate) fn is_numbered(&self, num_id: &str, level: usize) -> bool {
         self.nums
             .get(num_id)
             .and_then(|abs| self.formats.get(&(abs.clone(), level)))
-            .is_some_and(|fmt| fmt != "bullet" && fmt != "none")
+            .is_some_and(|fmt| fmt != "bullet")
     }
 }

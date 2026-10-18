@@ -173,25 +173,6 @@ fn hyperlinks_only_keep_safe_schemes() {
 }
 
 #[test]
-fn external_images_are_never_read_and_warn() {
-    let mut parts = DocxParts::empty();
-    parts.add_rels(
-        br#"<Relationships><Relationship Id="rId9" Type="t/image" Target="file:///etc/passwd" TargetMode="External"/></Relationships>"#,
-    );
-    let (md, doc) = run_body(
-        &p(
-            r#"<w:r><w:drawing><wp:inline><wp:docPr id="1" descr="pic"/><a:graphic><a:blip r:link="rId9"/></a:graphic></wp:inline></w:drawing></w:r>"#,
-        ),
-        &mut parts,
-    );
-    assert_eq!(md, "![pic]()");
-    assert_eq!(
-        doc.warnings,
-        vec!["Linked image not embedded: file:///etc/passwd".to_string()]
-    );
-}
-
-#[test]
 fn bullets_and_numbered_lists_with_levels() {
     let numbering = br#"<w:numbering xmlns:w="w">
       <w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/></w:lvl><w:lvl w:ilvl="1"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum>
@@ -224,4 +205,136 @@ fn footnotes_are_referenced_and_defined_at_the_end() {
         &mut parts,
     );
     assert_eq!(md, "text[^fn1]\n\n[^fn1]: note one");
+}
+
+fn build_docx(rels: &str, body: &str, entries: &[(&str, &[u8])]) -> Vec<u8> {
+    use std::io::Write;
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default();
+    let document = format!(
+        r#"<w:document xmlns:w="w" xmlns:r="r" xmlns:wp="wp" xmlns:a="a"><w:body>{body}</w:body></w:document>"#
+    );
+    let rels = format!("<Relationships>{rels}</Relationships>");
+    let mut all: Vec<(&str, &[u8])> = vec![
+        ("word/document.xml", document.as_bytes()),
+        ("word/_rels/document.xml.rels", rels.as_bytes()),
+    ];
+    all.extend_from_slice(entries);
+    for (name, bytes) in all {
+        writer.start_file(name, options).unwrap();
+        writer.write_all(bytes).unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+}
+
+fn convert_docx(bytes: Vec<u8>) -> (Document, Vec<(String, Vec<u8>)>) {
+    let options = ConvertOptions::default();
+    let mut assets = MemoryAssetSink::new("t_assets");
+    let cancel = CancelToken::new();
+    let progress = |_: f32| {};
+    let doc = {
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut assets,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        let input = Input {
+            path: "t.docx".into(),
+            bytes,
+        };
+        DocxConverter.convert(&input, &mut ctx).unwrap()
+    };
+    (doc, assets.files)
+}
+
+fn drawing(attrs: &str) -> String {
+    p(&format!(
+        r#"<w:r><w:drawing><wp:inline><wp:docPr id="1" descr="pic"/><a:graphic><a:blip {attrs}/></a:graphic></wp:inline></w:drawing></w:r>"#
+    ))
+}
+
+#[test]
+fn external_image_relationships_are_never_read_even_if_the_target_exists() {
+    let rels = r#"<Relationship Id="rId1" Type="t/image" Target="media/secret.png" TargetMode="External"/>"#;
+    let body = format!(
+        "{}{}",
+        drawing(r#"r:embed="rId1""#),
+        drawing(r#"r:link="rId1""#)
+    );
+    let bytes = build_docx(rels, &body, &[("word/media/secret.png", b"SECRET")]);
+    let (doc, files) = convert_docx(bytes);
+    assert!(files.is_empty(), "external target was stored: {files:?}");
+    assert_eq!(doc.markdown, "![pic]()\n\n![pic]()");
+    assert_eq!(
+        doc.warnings,
+        vec!["Linked image not embedded: media/secret.png".to_string(); 2]
+    );
+}
+
+#[test]
+fn internal_images_are_stored_once_and_linked() {
+    let rels = r#"<Relationship Id="rId1" Type="t/image" Target="media/a.png"/>"#;
+    let body = format!(
+        "{}{}",
+        drawing(r#"r:embed="rId1""#),
+        drawing(r#"r:embed="rId1""#)
+    );
+    let bytes = build_docx(rels, &body, &[("word/media/a.png", b"PNGDATA")]);
+    let (doc, files) = convert_docx(bytes);
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].1, b"PNGDATA");
+    assert_eq!(
+        doc.markdown,
+        "![pic](t_assets/a.png)\n\n![pic](t_assets/a.png)"
+    );
+    assert!(doc.warnings.is_empty(), "{:?}", doc.warnings);
+}
+
+#[test]
+fn malformed_styles_warn_but_conversion_continues() {
+    let mut parts = DocxParts::from_xml(
+        Some(br#"<w:styles xmlns:w="w"><w:style w:styleId="a"></w:oops>"#),
+        Some(br#"<w:numbering xmlns:w="w"><w:num></w:bad>"#),
+    );
+    let (md, doc) = run_body(&p("<w:r><w:t>still here</w:t></w:r>"), &mut parts);
+    assert_eq!(md, "still here");
+    assert_eq!(doc.warnings.len(), 2, "{:?}", doc.warnings);
+    assert!(doc.warnings[0].starts_with("Styles could not be fully read"));
+}
+
+#[test]
+fn corrupt_notes_are_skipped_with_a_warning() {
+    let mut parts = DocxParts::empty();
+    parts.set_notes(
+        Some(b"<w:footnotes xmlns:w=\"w\"><w:footnote></w:x>".to_vec()),
+        None,
+    );
+    let (md, doc) = run_body(&p("<w:r><w:t>body</w:t></w:r>"), &mut parts);
+    assert_eq!(md, "body");
+    assert!(doc.warnings[0].starts_with("Notes could not be read"));
+}
+
+#[test]
+fn any_non_bullet_number_format_is_numbered() {
+    let numbering = br#"<w:numbering xmlns:w="w">
+      <w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="none"/></w:lvl></w:abstractNum>
+      <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>"#;
+    let md = render_with(
+        r#"<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>x</w:t></w:r></w:p>"#,
+        None,
+        Some(numbering),
+    );
+    assert_eq!(md, "1. x");
+}
+
+#[test]
+fn huge_grid_spans_are_capped_with_one_warning() {
+    let cell = r#"<w:tc><w:tcPr><w:gridSpan w:val="1000"/></w:tcPr><w:p><w:r><w:t>c</w:t></w:r></w:p></w:tc>"#;
+    let row = format!("<w:tr>{cell}{cell}{cell}</w:tr>");
+    let mut parts = DocxParts::empty();
+    let (md, doc) = run_body(&format!("<w:tbl>{row}{row}</w:tbl>"), &mut parts);
+    let header = md.lines().next().unwrap();
+    assert_eq!(header.matches('|').count(), 201);
+    assert_eq!(doc.warnings, vec!["Large table truncated.".to_string()]);
 }
