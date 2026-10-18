@@ -108,7 +108,8 @@ export function setSettings(settings: Settings): Promise<Settings> {
   return invoke('set_settings', { settings });
 }
 
-export async function pickFiles(allFilesLabel = 'Tüm dosyalar'): Promise<string[]> {
+/** `allFilesLabel` is the localized name of the catch-all filter, for example `t('dialog.allFiles')`. */
+export async function pickFiles(allFilesLabel: string): Promise<string[]> {
   const picked = await open({
     multiple: true,
     directory: false,
