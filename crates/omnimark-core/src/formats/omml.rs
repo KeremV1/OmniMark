@@ -228,15 +228,25 @@ fn latex(node: &Node, depth: usize) -> Result<String, OmmlError> {
             )
         }
         "func" => {
-            let name = node
-                .child("fName")
-                .map(Node::plain_text)
-                .unwrap_or_default();
-            let name = name.trim();
             let arg = part(node, "e", d)?;
-            match latex_table::function(name) {
-                Some(cmd) => format!("{cmd}({arg})"),
-                None => format!("\\operatorname{{{}}}({arg})", escape_latex(name)),
+            let name_node = node.child("fName");
+            let plain_runs = name_node.is_some_and(|n| {
+                n.children
+                    .iter()
+                    .filter(|c| !c.name.ends_with("Pr"))
+                    .all(|c| c.name == "r")
+            });
+            match name_node {
+                Some(n) if plain_runs => {
+                    let name = clean_name(&n.plain_text());
+                    match latex_table::function(&name) {
+                        Some(cmd) => format!("{cmd}({arg})"),
+                        None => format!("\\operatorname{{{}}}({arg})", escape_latex(&name)),
+                    }
+                }
+                // Structured names such as limLow("lim", n→∞) render themselves.
+                Some(n) => format!("{}{arg}", children(n, d)?),
+                None => arg,
             }
         }
         "acc" => {
@@ -275,8 +285,9 @@ fn latex(node: &Node, depth: usize) -> Result<String, OmmlError> {
         }
         "limLow" => {
             let (e, lim) = (part(node, "e", d)?, part(node, "lim", d)?);
-            match e.trim() {
-                "lim" | "max" | "min" => format!("\\{}_{{{lim}}}", e.trim()),
+            let base = node.child("e").map(|n| clean_name(&n.plain_text()));
+            match base.as_deref() {
+                Some(b @ ("lim" | "max" | "min")) => format!("\\{b}_{{{lim}}}"),
                 _ => format!("\\underset{{{lim}}}{{{e}}}"),
             }
         }
@@ -289,6 +300,13 @@ fn latex(node: &Node, depth: usize) -> Result<String, OmmlError> {
         // Unknown and container elements (e, num, den, deg, box, phant, sSub, ...): keep content.
         _ => children(node, d)?,
     })
+}
+
+/// Text with invisible operators (U+2061..U+2064) and whitespace removed.
+fn clean_name(text: &str) -> String {
+    text.chars()
+        .filter(|c| !c.is_whitespace() && !('\u{2061}'..='\u{2064}').contains(c))
+        .collect()
 }
 
 fn join_all(node: &Node, name: &str, sep: &str, depth: usize) -> Result<String, OmmlError> {
@@ -542,6 +560,23 @@ mod tests {
             omml_to_latex(&xml),
             Err(OmmlError::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn lim_constructs_from_word() {
+        let sty = "<m:rPr><m:sty m:val=\"p\"/></m:rPr>";
+        let lim_low = format!(
+            "<m:limLow><m:e><m:r>{sty}<m:t>lim</m:t></m:r></m:e><m:lim>{}</m:lim></m:limLow>",
+            r("n→∞")
+        );
+        assert_eq!(tex(&lim_low), r"\lim_{n\to \infty }");
+        assert_eq!(
+            tex(&format!(
+                "<m:func><m:fName>{lim_low}</m:fName><m:e>{}</m:e></m:func>",
+                r("x")
+            )),
+            r"\lim_{n\to \infty }x"
+        );
     }
 
     #[test]
