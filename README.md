@@ -2,19 +2,19 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** M1 kodlaması sürüyor (3/19 görev). Henüz çalışan bir uygulama yok.
+> **Durum:** M1 kodlaması sürüyor (5/19 görev). Çekirdek altyapı ve komut satırı aracı (CLI) hazır; dönüştürücüler ve masaüstü arayüzü yazılıyor.
 
 ## Kaldığımız yer
 
-**Geldiğimiz nokta (2026-10-15):**
-- **Hazırlık:** araştırma, tasarım ve logo tamamlandı; 19 görevlik uygulama planı yazıldı.
-- **Kod:** Görev 1-3 tamamlandı ve incelendi: Rust workspace, hata tipleri, tür tespiti, karakter kodlaması, görsel çıkarma, çakışmasız çıktı adlandırma. 23 test geçiyor.
+**Geldiğimiz nokta (2026-10-18):**
+- **Çekirdek altyapı tamam (Faz A, Görev 1-5):** hata tipleri, tür tespiti, karakter kodlaması, görsel çıkarma, çakışmasız çıktı adlandırma, dönüştürücü kayıt defteri, çökme yalıtımı, güvenli zip/XML okuma, `omnimark` komut satırı aracı, golden test koşucusu ve pdfium indirme betikleri. 41 test geçiyor.
+- **İnceleme düzeltmesi yapıldı:** görsel bağlantılarında `% # ? [ ]` karakterleri artık kodlanıyor.
 - **Dal:** kod [`m1` dalında](https://github.com/KeremV1/OmniMark/tree/m1); M1 bitince `main`'e birleşecek.
 
 **Sıradaki iş:**
-1. İncelemeden gelen düzeltme: görsel bağlantılarında `% # ? [ ]` karakterlerinin kodlanması.
-2. Görev 4-5: dönüştürücü kayıt defteri, CLI, golden test altyapısı, pdfium indirme betiği.
-3. Dönüştürücüler (TXT/JSON, CSV, HTML, Excel, Word, PowerPoint, PDF) ve masaüstü arayüzü.
+1. Dönüştürücüler (Görev 6-13): TXT/JSON, CSV, HTML, Excel, Word, formüller, PowerPoint, PDF.
+2. Masaüstü uygulaması (Görev 14-16): Tauri arka ucu, kuyruk ve arayüz.
+3. Simgeler, CI, ölçüm ve M1 kapanışı (Görev 17-19).
 
 Ayrıntı: [HANDOFF.md](HANDOFF.md) · [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md) · [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)
 
@@ -60,7 +60,7 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 
 | Aşama | Kapsam | Yol haritası adımları | Durum | İlerleme |
 | --- | --- | --- | --- | --- |
-| **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | 🔄 Sürüyor | 3/19 görev |
+| **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | 🔄 Sürüyor | 5/19 görev |
 | **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | ⏳ Planlandı | — |
 | **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏳ Planlandı | — |
 | **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans iyileştirmeleri | 7 | ⏳ Planlandı | — |
@@ -76,7 +76,7 @@ Durum işaretleri: ✅ tamamlandı · 🔄 sürüyor · ⏳ planlandı.
 
 | Platform | Geliştirme ve derleme | Otomatik testler (CI) | Kurulum paketi | Durum |
 | --- | --- | --- | --- | --- |
-| **Windows** 10/11 (x64) | ✅ Geliştirme ortamı kurulu, çekirdek testleri geçiyor | ⏳ M1 · Görev 18 | ⏳ M5 · NSIS kurulum (`.exe`) | 🔄 Geliştiriliyor |
+| **Windows** 10/11 (x64) | ✅ Geliştirme ortamı kurulu, çekirdek ve CLI testleri geçiyor | ⏳ M1 · Görev 18 | ⏳ M5 · NSIS kurulum (`.exe`) | 🔄 Geliştiriliyor |
 | **macOS** (Apple Silicon ve Intel) | ⏳ CI üzerinde derlenecek | ⏳ M1 · Görev 18 | ⏳ M5 · `.dmg` (imzalama için Apple Developer hesabı gerekir) | ⏳ Planlandı |
 | **Linux** (x64; Ubuntu 22.04+ ve benzerleri) | ⏳ CI üzerinde derlenecek | ⏳ M1 · Görev 18 | ⏳ M5 · AppImage ve `.deb` | ⏳ Planlandı |
 
