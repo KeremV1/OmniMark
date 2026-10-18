@@ -12,8 +12,10 @@ pub enum Language {
     En,
 }
 
+/// Missing fields take their defaults, so an older or partial file keeps the fields it has
+/// (an empty output folder is replaced in `sanitized`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub output_dir: PathBuf,
     pub extract_images: bool,
@@ -43,6 +45,12 @@ fn default_workers() -> usize {
         .map(|n| n.get().saturating_sub(1))
         .unwrap_or(1)
         .clamp(1, 4)
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self::defaults(Path::new(""))
+    }
 }
 
 impl Settings {
@@ -127,6 +135,25 @@ mod tests {
         }
         let ok = Settings::defaults(dir.path()).sanitized(&default_out);
         assert_eq!(ok.output_dir, dir.path());
+    }
+
+    #[test]
+    fn partial_file_keeps_its_known_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let default_out = dir.path().join("OmniMark");
+        let custom = dir.path().join("custom");
+        let path = dir.path().join("settings.json");
+        let json = serde_json::json!({
+            "outputDir": custom,
+            "extractImages": false,
+            "workers": 3
+        });
+        std::fs::write(&path, json.to_string()).unwrap();
+        let s = Settings::load(&path, &default_out);
+        assert_eq!(s.output_dir, custom);
+        assert!(!s.extract_images);
+        assert_eq!(s.workers, 3);
+        assert_eq!(s.language, Language::Auto);
     }
 
     #[test]

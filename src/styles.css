@@ -978,6 +978,19 @@ body.is-dragging::after {
   overflow-wrap: anywhere;
 }
 
+.dialog-error {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-size: 13px;
+}
+
+.dialog-error[hidden] {
+  display: none;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
