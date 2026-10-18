@@ -5,3 +5,5 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 
 | Fixture | MarkItDown beklentisi | OmniMark beklentisi | Gerekçe |
 | --- | --- | --- | --- |
+| test.pptx | `![…](Picture4.jpg)` (var olmayan dosya, hep .jpg) | `test_assets/<gerçek ad>` dosyası | Görseller erişilebilir |
+| (satır içi testler) | Grafik sonrası satır sonu yok, `10.0` | Satır sonu var, önbellek değeri (`10`) | Yapışan metin hatası; pandas/py float biçimi |
