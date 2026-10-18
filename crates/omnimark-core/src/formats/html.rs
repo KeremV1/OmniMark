@@ -8,6 +8,9 @@ use crate::registry::{ConvertContext, Converter, Priority};
 use crate::{Document, FileInfo, Input};
 
 const MAX_DEPTH: usize = 1500;
+/// Upper bound on the number of start tags; larger documents fall back to plain text so the
+/// DOM built by html5ever/htmd stays bounded.
+const MAX_ELEMENTS: usize = 200_000;
 const STACK_SIZE: usize = 64 * 1024 * 1024;
 const VOID_ELEMENTS: &[&str] = &[
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track",
@@ -36,7 +39,8 @@ impl Converter for HtmlConverter {
     fn convert(&self, input: &Input, _ctx: &mut ConvertContext<'_>) -> Result<Document> {
         let html = decode_html(&input.bytes);
         let title = extract_title(&html);
-        let mut document = if max_tag_depth(&html) > MAX_DEPTH {
+        let (depth, elements) = html_stats(&html);
+        let mut document = if depth > MAX_DEPTH || elements > MAX_ELEMENTS {
             let mut d = Document::new(strip_tags(&html));
             d.warn("HTML is too deeply nested; converted as plain text.");
             d
@@ -44,11 +48,16 @@ impl Converter for HtmlConverter {
             let owned = html.clone();
             let markdown = std::thread::Builder::new()
                 .stack_size(STACK_SIZE)
-                .spawn(move || html_to_markdown(&owned))
+                .spawn(move || html_to_markdown_checked(&owned))
                 .map_err(ConvertError::Io)?
                 .join()
                 .map_err(|_| ConvertError::Corrupt("HTML conversion failed".into()))?;
-            Document::new(markdown)
+            let (markdown, converted) = markdown;
+            let mut d = Document::new(markdown);
+            if !converted {
+                d.warn("HTML could not be fully converted; plain text was used.");
+            }
+            d
         };
         document.title = title;
         Ok(document)
@@ -72,7 +81,13 @@ fn is_data_uri(s: &str) -> bool {
     s.get(..5).is_some_and(|p| p.eq_ignore_ascii_case("data:"))
 }
 
+#[cfg(test)]
 pub(crate) fn html_to_markdown(html: &str) -> String {
+    html_to_markdown_checked(html).0
+}
+
+/// Returns the Markdown and whether htmd succeeded (`false` means the plain-text fallback ran).
+fn html_to_markdown_checked(html: &str) -> (String, bool) {
     let converter = HtmlToMarkdown::builder()
         .options(Options {
             bullet_list_marker: BulletListMarker::Dash,
@@ -151,7 +166,10 @@ pub(crate) fn html_to_markdown(html: &str) -> String {
             },
         )
         .build();
-    converter.convert(html).unwrap_or_else(|_| strip_tags(html))
+    match converter.convert(html) {
+        Ok(markdown) => (markdown, true),
+        Err(_) => (strip_tags(html), false),
+    }
 }
 
 /// Decodes HTML bytes: BOM, then `<meta charset>` within the first 4 KB, then generic detection.
@@ -309,8 +327,15 @@ fn starts_tag(html: &str, i: usize) -> bool {
     matches!(html.as_bytes().get(i + 1), Some(c) if *c == b'/' || c.is_ascii_alphabetic())
 }
 
+#[cfg(test)]
 pub(crate) fn max_tag_depth(html: &str) -> usize {
-    let (mut depth, mut max, mut i) = (0usize, 0usize, 0usize);
+    html_stats(html).0
+}
+
+/// Returns (maximum nesting depth, number of start tags). HTML parsers ignore `/>` on
+/// non-void elements, so `<div/>` counts as an open element (the safe side, also in svg/math).
+fn html_stats(html: &str) -> (usize, usize) {
+    let (mut depth, mut max, mut elements, mut i) = (0usize, 0usize, 0usize, 0usize);
     while let Some(off) = html[i..].find('<') {
         i += off;
         if matches!(html.as_bytes().get(i + 1), Some(b'!' | b'?')) {
@@ -321,11 +346,14 @@ pub(crate) fn max_tag_depth(html: &str) -> usize {
             i += 1;
             continue;
         }
-        let (name, closing, self_closing, end) = scan_tag(html, i);
+        let (name, closing, _, end) = scan_tag(html, i);
         i = end;
         if closing {
             depth = depth.saturating_sub(1);
-        } else if !self_closing && !VOID_ELEMENTS.contains(&name.as_str()) {
+        } else {
+            elements += 1;
+        }
+        if !closing && !VOID_ELEMENTS.contains(&name.as_str()) {
             if name == "script" || name == "style" {
                 i = skip_raw_text(html, i, &name);
             } else {
@@ -334,7 +362,7 @@ pub(crate) fn max_tag_depth(html: &str) -> usize {
             }
         }
     }
-    max
+    (max, elements)
 }
 
 pub(crate) fn strip_tags(html: &str) -> String {
@@ -357,7 +385,7 @@ pub(crate) fn strip_tags(html: &str) -> String {
         } else if starts_tag(html, i) {
             let (name, closing, _, end) = scan_tag(html, i);
             i = end;
-            if !closing && (name == "script" || name == "style") {
+            if !closing && matches!(name.as_str(), "script" | "style" | "title") {
                 i = skip_raw_text(html, i, &name);
             }
             if BLOCK_ELEMENTS.contains(&name.as_str()) && (closing || name == "br") {
@@ -457,6 +485,71 @@ mod tests {
         let html = format!("{}deep{}", "<div>".repeat(5000), "</div>".repeat(5000));
         assert_eq!(max_tag_depth(&html), 5000);
         assert_eq!(strip_tags(&html).trim(), "deep");
+    }
+
+    fn run_convert(html: &str) -> Document {
+        use crate::assets::MemoryAssetSink;
+        let options = crate::ConvertOptions::default();
+        let mut assets = MemoryAssetSink::new("x_assets");
+        let cancel = crate::CancelToken::new();
+        let progress = |_: f32| {};
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut assets,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        let input = Input {
+            path: std::path::PathBuf::from("a.html"),
+            bytes: html.as_bytes().to_vec(),
+        };
+        HtmlConverter.convert(&input, &mut ctx).unwrap()
+    }
+
+    const NESTED_WARNING: &str = "HTML is too deeply nested; converted as plain text.";
+
+    #[test]
+    fn self_closing_non_void_tags_count_as_open() {
+        let html = "<div/>".repeat(5000);
+        assert_eq!(max_tag_depth(&html), 5000);
+        let doc = run_convert(&format!("<title>T</title>{html}deep"));
+        assert!(
+            doc.warnings.iter().any(|w| w == NESTED_WARNING),
+            "{:?}",
+            doc.warnings
+        );
+        assert_eq!(doc.markdown.trim(), "deep");
+        assert_eq!(doc.title.as_deref(), Some("T"));
+    }
+
+    #[test]
+    fn void_self_closing_tags_do_not_add_depth() {
+        let html = "<br/>".repeat(5000);
+        assert_eq!(max_tag_depth(&html), 0);
+        assert!(run_convert(&html).warnings.is_empty());
+    }
+
+    #[test]
+    fn too_many_elements_fall_back_to_plain_text() {
+        let html = format!("<p>{}</p>", "<i></i>".repeat(MAX_ELEMENTS));
+        let doc = run_convert(&html);
+        assert!(
+            doc.warnings.iter().any(|w| w == NESTED_WARNING),
+            "{:?}",
+            doc.warnings
+        );
+    }
+
+    #[test]
+    fn normal_html_converts_without_warnings() {
+        let doc = run_convert("<h1>Hi</h1><p>there</p>");
+        assert!(doc.warnings.is_empty());
+        assert_eq!(
+            doc.markdown.trim(),
+            "# Hi
+
+there"
+        );
     }
 
     #[test]
