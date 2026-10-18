@@ -1,0 +1,150 @@
+[
+ {
+  "file": "test.pdf",
+  "include": [
+   "While there is contemporaneous exploration of multi-agent approaches",
+   "Large language models (LLMs) are becoming a crucial building block in developing powerful agents",
+   "In light of the intuition and early evidence of promise",
+   "Introduction"
+  ],
+  "exclude": [
+   "|",
+   "Largelanguagemodels"
+  ]
+ },
+ {
+  "file": "pdf_cleanup_plain.pdf",
+  "include": [
+   "While there is contemporaneous exploration of multi-agent approaches"
+  ],
+  "exclude": [
+   "ZAVA AUTO REPAIR",
+   "| Customer Information |"
+  ],
+  "counts": [
+   {
+    "text": "While there is contemporaneous exploration",
+    "count": 3
+   }
+  ]
+ },
+ {
+  "file": "pdf_cleanup_form.pdf",
+  "include": [
+   "ZAVA AUTO REPAIR",
+   "| Customer Information |",
+   "Gabriel Diaz",
+   "| GRAND TOTAL",
+   "5,738"
+  ],
+  "exclude": [
+   "While there is contemporaneous exploration"
+  ],
+  "counts": [
+   {
+    "text": "ZAVA AUTO REPAIR",
+    "count": 3
+   }
+  ]
+ },
+ {
+  "file": "pdf_cleanup_mixed.pdf",
+  "include": [
+   "ZAVA AUTO REPAIR",
+   "| Customer Information |",
+   "Gabriel Diaz",
+   "| GRAND TOTAL",
+   "5,738",
+   "While there is contemporaneous exploration of multi-agent approaches"
+  ],
+  "counts": [
+   {
+    "text": "ZAVA AUTO REPAIR",
+    "count": 2
+   }
+  ]
+ },
+ {
+  "file": "masterformat_partial_numbering.pdf",
+  "regex": [
+   "(?m)^\\.1 \\S"
+  ],
+  "exclude": [
+   "\n.1\n"
+  ]
+ },
+ {
+  "file": "MEDRPT-2024-PAT-3847_medical_report_scan.pdf",
+  "note": "Scanned PDF without a text layer: empty output plus a warning (OCR is M2)."
+ },
+ {
+  "file": "SPARSE-2024-INV-1234_borderless_table.pdf",
+  "include": [
+   "INVENTORY RECONCILIATION REPORT",
+   "Report ID: SPARSE-2024-INV-1234",
+   "Prepared By: Sarah Martinez",
+   "Variance Analysis:",
+   "Extended Inventory Review:",
+   "Recommendations:"
+  ],
+  "regex": [
+   "\\|\\s*Product Code\\s*\\|",
+   "\\|\\s*SKU-6678\\s*\\|\\s*Software",
+   "\\$42,000\\.00"
+  ],
+  "counts": [
+   {
+    "text": "SKU-8847",
+    "count": 3
+   }
+  ]
+ },
+ {
+  "file": "RECEIPT-2024-TXN-98765_retail_purchase.pdf",
+  "include": [
+   "TECHMART ELECTRONICS",
+   "TXN: TXN-98765-2024",
+   "Cashier: Emily Rodriguez",
+   "TOTAL $821.14",
+   "Visa Card ending in 4782",
+   "Sarah Mitchell"
+  ],
+  "regex": [
+   "SUBTOTAL\\s+\\$863\\.91"
+  ],
+  "exclude": [
+   "|"
+  ]
+ },
+ {
+  "file": "REPAIR-2022-INV-001_multipage.pdf",
+  "include": [
+   "ZAVA AUTO REPAIR",
+   "Gabriel Diaz",
+   "5,738"
+  ],
+  "regex": [
+   "\\|\\s*Insured name\\s*\\|",
+   "\\|\\s*Gabriel Diaz\\s*\\|",
+   "\\|\\s*Year\\s*\\|",
+   "\\|\\s*2022\\s*\\|",
+   "\\|\\s*Hours\\s*\\|",
+   "\\|\\s*GRAND TOTAL"
+  ]
+ },
+ {
+  "file": "movie-theater-booking-2024.pdf",
+  "include": [
+   "BOOKING ORDER",
+   "STARLIGHT CINEMAS",
+   "Premier Entertainment Group",
+   "Universal Studios Distribution",
+   "CUST-98765",
+   "$12,500.00"
+  ],
+  "regex": [
+   "\\|\\s*Order / Rev:\\s*\\|\\s*2024-12-5678",
+   "\\|\\s*Start Date\\s*\\|\\s*End Date"
+  ]
+ }
+]

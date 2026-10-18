@@ -5,3 +5,5 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 
 | Fixture | MarkItDown beklentisi | OmniMark beklentisi | Gerekçe |
 | --- | --- | --- | --- |
+| PDF fixture'ları | pdfminer/pdfplumber çıktısıyla birebir eşitlik | İçerik ve yapı doğrulaması; başlıklar `#` ile, madde imleri `- ` ile | pdfium farklı metin motoru; MarkItDown başlık üretmiyor |
+| PDF form sayfaları | Tablo satırı ile düz metin satırı bitişik (satır sonu ile) | Tablo öncesi ve sonrası boş satır | Bitişik düz satır, Markdown'da tablo satırı sayılmasın |
