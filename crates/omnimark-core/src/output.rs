@@ -40,6 +40,16 @@ impl OutputAllocator {
             .reserved
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        // Compare case-insensitively so names stay unique on every filesystem
+        // (Windows and macOS are case-insensitive, Linux is not).
+        let on_disk: HashSet<String> = std::fs::read_dir(&self.dir)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|e| e.file_name().to_string_lossy().to_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
         let mut n = 1u32;
         loop {
             let name = if n == 1 {
@@ -50,7 +60,11 @@ impl OutputAllocator {
             let markdown_path = self.dir.join(format!("{name}.md"));
             let assets_dir = self.dir.join(format!("{name}_assets"));
             let key = name.to_lowercase();
-            if !reserved.contains(&key) && !markdown_path.exists() && !assets_dir.exists() {
+            let taken = on_disk.contains(&format!("{key}.md"))
+                || on_disk.contains(&format!("{key}_assets"))
+                || markdown_path.exists()
+                || assets_dir.exists();
+            if !reserved.contains(&key) && !taken {
                 reserved.insert(key);
                 return OutputTarget {
                     markdown_path,
