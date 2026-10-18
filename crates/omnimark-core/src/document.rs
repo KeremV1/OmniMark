@@ -21,6 +21,13 @@ impl Document {
     pub fn warn(&mut self, message: impl Into<String>) {
         self.warnings.push(message.into());
     }
+
+    /// Adds `message` unless the document already carries it.
+    pub fn warn_once(&mut self, message: &str) {
+        if !self.warnings.iter().any(|w| w == message) {
+            self.warnings.push(message.to_string());
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -66,7 +66,7 @@ impl Converter for XlsxConverter {
             let mut section = format!("## {name}");
             if !grid.is_empty() {
                 section.push_str("\n\n");
-                section.push_str(&markdown::table(&grid));
+                section.push_str(&markdown::table(&grid).0);
             }
             if want_images {
                 match store_sheet_images(&input.bytes, name, ctx) {

@@ -1,6 +1,6 @@
 use crate::detect::decode_text;
 use crate::error::Result;
-use crate::markdown::table;
+use crate::markdown::{table, MAX_TABLE_CELLS, MAX_TABLE_COLUMNS, TABLE_WARNING};
 use crate::registry::{ConvertContext, Converter};
 use crate::{Document, FileInfo, Input};
 
@@ -18,36 +18,65 @@ impl Converter for CsvConverter {
     fn convert(&self, input: &Input, _ctx: &mut ConvertContext<'_>) -> Result<Document> {
         let decoded = decode_text(&input.bytes);
         let text = decoded.trim_start_matches('\u{feff}');
-        let mut rows = parse_csv(text, sniff_delimiter(text));
+        let (mut rows, parse_truncated) = parse_csv(text, sniff_delimiter(text));
         trim_outer_blank_rows(&mut rows);
-        Ok(Document::new(table(&rows)))
+        let (markdown, table_truncated) = table(&rows);
+        let mut doc = Document::new(markdown);
+        if parse_truncated || table_truncated {
+            doc.warn_once(TABLE_WARNING);
+        }
+        Ok(doc)
     }
 }
 
 /// Python `csv.reader` semantics: quotes with `""` escapes, CR / LF / CRLF record ends,
 /// a completely empty line is an empty row.
-pub(crate) fn parse_csv(text: &str, delimiter: char) -> Vec<Vec<String>> {
+///
+/// The grid is bounded while parsing: fields past [`MAX_TABLE_COLUMNS`] in a row are dropped,
+/// and parsing stops once [`MAX_TABLE_CELLS`] cells (an empty row counts as one) are stored.
+/// Leading empty rows are not stored (the table trims them anyway). The flag is `true` when
+/// anything was dropped.
+pub(crate) fn parse_csv(text: &str, delimiter: char) -> (Vec<Vec<String>>, bool) {
     let mut rows = Vec::new();
     let mut row: Vec<String> = Vec::new();
     let mut field = String::new();
     let mut in_quotes = false;
     let mut row_started = false;
+    let mut cells = 0usize;
+    let mut truncated = false;
     let mut chars = text.chars().peekable();
 
+    let push_field = |row: &mut Vec<String>, field: &mut String, truncated: &mut bool| {
+        if row.len() < MAX_TABLE_COLUMNS {
+            row.push(std::mem::take(field));
+        } else {
+            field.clear();
+            *truncated = true;
+        }
+    };
     let end_record = |row: &mut Vec<String>,
                       field: &mut String,
                       row_started: &mut bool,
-                      rows: &mut Vec<Vec<String>>| {
+                      rows: &mut Vec<Vec<String>>,
+                      cells: &mut usize,
+                      truncated: &mut bool| {
         if *row_started {
-            row.push(std::mem::take(field));
+            push_field(row, field, truncated);
+            *cells += row.len();
             rows.push(std::mem::take(row));
-        } else {
+        } else if !rows.is_empty() {
+            *cells += 1;
             rows.push(Vec::new());
         }
         *row_started = false;
     };
 
     while let Some(ch) = chars.next() {
+        if cells >= MAX_TABLE_CELLS {
+            truncated = true;
+            row_started = false;
+            break;
+        }
         if in_quotes {
             if ch == '"' {
                 if chars.peek() == Some(&'"') {
@@ -70,10 +99,17 @@ pub(crate) fn parse_csv(text: &str, delimiter: char) -> Vec<Vec<String>> {
                 if ch == '\r' && chars.peek() == Some(&'\n') {
                     chars.next();
                 }
-                end_record(&mut row, &mut field, &mut row_started, &mut rows);
+                end_record(
+                    &mut row,
+                    &mut field,
+                    &mut row_started,
+                    &mut rows,
+                    &mut cells,
+                    &mut truncated,
+                );
             }
             c if c == delimiter => {
-                row.push(std::mem::take(&mut field));
+                push_field(&mut row, &mut field, &mut truncated);
                 row_started = true;
             }
             c => {
@@ -83,9 +119,16 @@ pub(crate) fn parse_csv(text: &str, delimiter: char) -> Vec<Vec<String>> {
         }
     }
     if row_started {
-        end_record(&mut row, &mut field, &mut row_started, &mut rows);
+        end_record(
+            &mut row,
+            &mut field,
+            &mut row_started,
+            &mut rows,
+            &mut cells,
+            &mut truncated,
+        );
     }
-    rows
+    (rows, truncated)
 }
 
 /// Picks `,`, `;` or tab: the delimiter whose most common field count (>1) covers the most of the
@@ -96,6 +139,7 @@ pub(crate) fn sniff_delimiter(text: &str) -> char {
     let score_of = |candidate: char| -> usize {
         let mut counts = std::collections::HashMap::new();
         for row in parse_csv(&sample, candidate)
+            .0
             .iter()
             .filter(|r| !r.is_empty())
         {
@@ -110,6 +154,7 @@ pub(crate) fn sniff_delimiter(text: &str) -> char {
     };
     let (comma, semicolon, tab) = (score_of(','), score_of(';'), score_of('\t'));
     let decimal_comma = parse_csv(&sample, ';')
+        .0
         .iter()
         .flatten()
         .any(|field| is_decimal_comma(field));
@@ -161,6 +206,10 @@ mod tests {
     use std::path::PathBuf;
 
     fn md(bytes: &[u8]) -> String {
+        convert(bytes).markdown
+    }
+
+    fn convert(bytes: &[u8]) -> Document {
         let options = ConvertOptions::default();
         let mut assets = NullAssetSink;
         let cancel = CancelToken::new();
@@ -180,7 +229,29 @@ mod tests {
                 &mut ctx,
             )
             .unwrap()
-            .markdown
+    }
+
+    #[test]
+    fn wide_header_row_is_capped_with_one_warning() {
+        let input = format!("{}\n{}", ",".repeat(5_000), "x\n".repeat(5_000));
+        let doc = convert(input.as_bytes());
+        let header = doc.markdown.lines().next().unwrap();
+        assert_eq!(header.matches('|').count(), MAX_TABLE_COLUMNS + 1);
+        assert!(doc.markdown.len() < 5_000_000, "{}", doc.markdown.len());
+        assert_eq!(doc.warnings, vec![TABLE_WARNING.to_string()]);
+    }
+
+    #[test]
+    fn parser_caps_fields_per_row_and_total_cells() {
+        let (rows, truncated) = parse_csv(&",".repeat(50_000), ',');
+        assert!(truncated);
+        assert_eq!(rows[0].len(), MAX_TABLE_COLUMNS);
+        let (rows, truncated) = parse_csv(&"a\n".repeat(MAX_TABLE_CELLS + 10), ',');
+        assert!(truncated);
+        assert_eq!(rows.len(), MAX_TABLE_CELLS);
+        let (rows, truncated) = parse_csv("a,b\n1,2", ',');
+        assert!(!truncated);
+        assert_eq!(rows.len(), 2);
     }
 
     #[test]
@@ -250,7 +321,7 @@ mod tests {
     #[test]
     fn quoted_empty_field_is_not_a_blank_row() {
         assert_eq!(
-            parse_csv("a\n\"\"\n\nb", ','),
+            parse_csv("a\n\"\"\n\nb", ',').0,
             vec![
                 vec!["a".to_string()],
                 vec![String::new()],

@@ -8,7 +8,9 @@ use super::styles::outline_to_heading;
 use super::{DocxParts, DOCUMENT_PART};
 use crate::error::{ConvertError, Result};
 use crate::formats::omml::omml_to_latex;
-use crate::markdown::{image, table};
+// The shared table caps also guard against tiny XML that expands into huge tables
+// (`w:gridSpan` in the thousands): cells are dropped while the table is being built.
+use crate::markdown::{image, table, MAX_TABLE_CELLS, MAX_TABLE_COLUMNS, TABLE_WARNING};
 use crate::ooxml::resolve_part;
 use crate::registry::ConvertContext;
 use crate::xml::{append_text, attr, local_name, reader};
@@ -27,10 +29,6 @@ const SKIPPED: &[&str] = &[
     "sectPrChange",
 ];
 const CANCEL_EVERY: usize = 200;
-/// Caps against tiny XML that expands into huge tables (`w:gridSpan` in the thousands).
-const MAX_TABLE_COLUMNS: usize = 200;
-const MAX_TABLE_CELLS: usize = 100_000;
-const TABLE_WARNING: &str = "Large table truncated.";
 
 pub(crate) fn render_body(
     document_xml: &[u8],
@@ -519,8 +517,8 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
                 String::new()
             });
         }
-        if truncated && !self.doc.warnings.iter().any(|w| w == TABLE_WARNING) {
-            self.doc.warn(TABLE_WARNING);
+        if truncated {
+            self.doc.warn_once(TABLE_WARNING);
         }
     }
 
@@ -553,7 +551,10 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
                 });
             }
         } else {
-            let md = table(&rows);
+            let (md, truncated) = table(&rows);
+            if truncated {
+                self.doc.warn_once(TABLE_WARNING);
+            }
             self.emit(Block {
                 md,
                 plain: String::new(),
