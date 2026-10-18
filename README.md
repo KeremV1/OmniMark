@@ -81,8 +81,8 @@ Durum işaretleri: ✅ tamamlandı · 🔄 sürüyor · ⏳ planlandı.
 | Platform | Geliştirme ve derleme | Otomatik testler (CI) | Kurulum paketi | Durum |
 | --- | --- | --- | --- | --- |
 | **Windows** 10/11 (x64) | ✅ Geliştirme ortamı kurulu, tüm testler geçiyor | ✅ GitHub Actions | ⏳ M5 · NSIS kurulum (`.exe`) | 🔄 Geliştiriliyor |
-| **macOS** (Apple Silicon ve Intel) | ✅ CI üzerinde derleniyor | ✅ GitHub Actions | ⏳ M5 · `.dmg` (imzalama için Apple Developer hesabı gerekir) | ⏳ Planlandı |
-| **Linux** (x64; Ubuntu 22.04+ ve benzerleri) | ✅ CI üzerinde derleniyor | ✅ GitHub Actions | ⏳ M5 · AppImage ve `.deb` | ⏳ Planlandı |
+| **macOS** (Apple Silicon ve Intel) | ✅ CI üzerinde derleniyor | ✅ GitHub Actions | ⏳ M5 · `.dmg` (imzalama için Apple Developer hesabı gerekir) | 🔄 CI’da test ediliyor |
+| **Linux** (x64; Ubuntu 22.04+ ve benzerleri) | ✅ CI üzerinde derleniyor | ✅ GitHub Actions | ⏳ M5 · AppImage ve `.deb` | 🔄 CI’da test ediliyor |
 
 ## Geliştirme
 
