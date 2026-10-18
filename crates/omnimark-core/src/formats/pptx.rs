@@ -16,6 +16,10 @@ const ROW_TOLERANCE: i128 = 180_000;
 const MAX_DEPTH: usize = 256;
 /// Chart points with an index at or above this are ignored, so a hostile `c:pt@idx` cannot force a huge allocation.
 const MAX_CHART_POINTS: usize = 10_000;
+/// Series beyond this are ignored.
+const MAX_CHART_SERIES: usize = 256;
+/// Upper bound on `rows * series` cells; the row count shrinks to fit, so total allocation stays bounded.
+const MAX_CHART_CELLS: usize = 100_000;
 
 pub struct PptxConverter;
 
@@ -653,6 +657,7 @@ pub(crate) fn chart_markdown(chart_xml: &[u8]) -> Option<String> {
     if series.is_empty() {
         return None;
     }
+    series.truncate(MAX_CHART_SERIES);
 
     let categories = series[0].child("cat").map(cache_points).unwrap_or_default();
     let names: Vec<String> = series
@@ -675,7 +680,8 @@ pub(crate) fn chart_markdown(chart_xml: &[u8]) -> Option<String> {
         .chain(values.iter().flatten())
         .map(|(idx, _)| idx + 1)
         .max()
-        .unwrap_or(0);
+        .unwrap_or(0)
+        .min(MAX_CHART_CELLS / series.len());
     let cats = dense(&categories, len);
     let columns: Vec<Vec<String>> = values.iter().map(|v| dense(v, len)).collect();
 
@@ -754,6 +760,20 @@ mod tests {
 | A | 1 |
 "
         );
+    }
+
+    #[test]
+    fn chart_caps_series_count_and_total_cells() {
+        let one = r#"<c:ser><c:val><c:numRef><c:numCache><c:pt idx="9999"><c:v>1</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser>"#;
+        let xml = format!(
+            r#"<c:chartSpace xmlns:c="c"><c:chart><c:plotArea><c:barChart>{}</c:barChart></c:plotArea></c:chart></c:chartSpace>"#,
+            one.repeat(5000)
+        );
+        let md = chart_markdown(xml.as_bytes()).unwrap();
+        let lines: Vec<&str> = md.lines().filter(|l| l.starts_with('|')).collect();
+        let columns = |l: &str| l.matches(" | ").count() + 1;
+        assert_eq!(columns(lines[0]), 1 + MAX_CHART_SERIES);
+        assert!((lines.len() - 2) * MAX_CHART_SERIES <= MAX_CHART_CELLS);
     }
 
     #[test]
