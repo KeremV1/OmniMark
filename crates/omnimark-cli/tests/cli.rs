@@ -58,3 +58,31 @@ fn converts_a_text_file_and_never_overwrites() {
         "merhaba"
     );
 }
+
+#[test]
+fn pdf_uses_vendor_pdfium_from_the_current_dir_by_default() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let vendored = root
+        .join("vendor/pdfium")
+        .join(omnimark_core::formats::pdfium_library_file_name());
+    if !vendored.is_file() {
+        eprintln!("skipped: run scripts/fetch-pdfium first");
+        return;
+    }
+    let out = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+        .current_dir(&root)
+        .env_remove("OMNIMARK_PDFIUM_PATH")
+        .args(["convert", "--stdout"])
+        .arg(fixture("test.pdf"))
+        .arg("-o")
+        .arg(out.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!output.stdout.is_empty());
+}

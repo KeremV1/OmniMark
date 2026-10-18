@@ -187,33 +187,7 @@ fn convert_one(
 mod tests {
     use super::*;
     use omnimark_core::formats::{default_registry, RegistryConfig};
-    use omnimark_core::{Converter, Document, FileInfo, Input};
     use std::sync::Mutex;
-
-    /// Stand-in for the real text converter (developed in parallel): passes `.txt` through.
-    struct PassThrough;
-
-    impl Converter for PassThrough {
-        fn name(&self) -> &'static str {
-            "pass-through"
-        }
-        fn accepts(&self, info: &FileInfo) -> bool {
-            info.has_extension(&["txt"])
-        }
-        fn convert(
-            &self,
-            input: &Input,
-            _: &mut ConvertContext<'_>,
-        ) -> omnimark_core::Result<Document> {
-            Ok(Document::new(String::from_utf8_lossy(&input.bytes)))
-        }
-    }
-
-    fn registry_with_text() -> Registry {
-        let mut registry = default_registry(&RegistryConfig::default());
-        registry.register(PassThrough);
-        registry
-    }
 
     fn collect(
         registry: &Registry,
@@ -241,7 +215,8 @@ mod tests {
             options: ConvertOptions::default(),
             workers: 2,
         };
-        let events = collect(&registry_with_text(), &request, &CancelToken::new());
+        let registry = default_registry(&RegistryConfig::default());
+        let events = collect(&registry, &request, &CancelToken::new());
         assert_eq!(events.first(), Some(&ConvertEvent::Started { total: 2 }));
         assert_eq!(
             events.last(),

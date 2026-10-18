@@ -8,11 +8,15 @@ use crate::error::{ConvertError, Result};
 
 pub const MAX_ENTRIES: usize = 10_000;
 pub const MAX_TOTAL_UNCOMPRESSED: u64 = 1024 * 1024 * 1024;
+/// Largest single entry that is decompressed; the declared size is never trusted beyond it.
+pub const MAX_ENTRY_UNCOMPRESSED: u64 = 256 * 1024 * 1024;
 
 pub struct Archive<'a> {
     zip: ZipArchive<Cursor<&'a [u8]>>,
     /// Bytes that may still be decompressed from this archive.
     budget: u64,
+    /// Bytes one entry may decompress to.
+    entry_limit: u64,
 }
 
 impl<'a> Archive<'a> {
@@ -27,12 +31,19 @@ impl<'a> Archive<'a> {
         Ok(Self {
             zip,
             budget: MAX_TOTAL_UNCOMPRESSED,
+            entry_limit: MAX_ENTRY_UNCOMPRESSED,
         })
     }
 
     /// Overrides the decompression budget (tests).
     pub fn with_budget(mut self, budget: u64) -> Self {
         self.budget = budget;
+        self
+    }
+
+    /// Overrides the per-entry limit (tests).
+    pub fn with_entry_limit(mut self, limit: u64) -> Self {
+        self.entry_limit = limit;
         self
     }
 
@@ -54,17 +65,22 @@ impl<'a> Archive<'a> {
             return Ok(None);
         };
         let mut file = self.zip.by_index(index).map_err(ConvertError::corrupt)?;
-        if file.size() > self.budget {
-            return Err(ConvertError::Corrupt(
-                "archive expands beyond the 1 GB limit".into(),
-            ));
+        let too_big = |limit: u64, budget: u64| {
+            ConvertError::Corrupt(if limit < budget {
+                format!("archive entry {name} expands beyond the per-entry limit")
+            } else {
+                "archive expands beyond the 1 GB limit".into()
+            })
+        };
+        let limit = self.budget.min(self.entry_limit);
+        if file.size() > limit {
+            return Err(too_big(limit, self.budget));
         }
-        let mut buf = Vec::with_capacity(file.size() as usize);
-        (&mut file).take(self.budget + 1).read_to_end(&mut buf)?;
-        if buf.len() as u64 > self.budget {
-            return Err(ConvertError::Corrupt(
-                "archive expands beyond the 1 GB limit".into(),
-            ));
+        // The declared size is only a hint: it may lie, so it never sizes the buffer beyond the limit.
+        let mut buf = Vec::with_capacity(file.size().min(limit) as usize);
+        (&mut file).take(limit + 1).read_to_end(&mut buf)?;
+        if buf.len() as u64 > limit {
+            return Err(too_big(limit, self.budget));
         }
         self.budget -= buf.len() as u64;
         Ok(Some(buf))
@@ -116,6 +132,17 @@ mod tests {
         assert!(archive.read("a").is_ok());
         assert_eq!(
             archive.read("b").unwrap_err().kind(),
+            crate::ErrorKind::Corrupt
+        );
+    }
+
+    #[test]
+    fn enforces_the_per_entry_limit() {
+        let bytes = zip_with(&[("small", &[b'x'; 16]), ("big", &[b'y'; 64])]);
+        let mut archive = Archive::open(&bytes).unwrap().with_entry_limit(32);
+        assert_eq!(archive.read("small").unwrap().unwrap().len(), 16);
+        assert_eq!(
+            archive.read("big").unwrap_err().kind(),
             crate::ErrorKind::Corrupt
         );
     }

@@ -150,7 +150,7 @@ const actions: Actions = {
     openOutputDir().catch(actions.fail);
   },
   openSettings() {
-    openSettingsDialog({ settings: view.settings, onSave: saveSettings, onError: actions.fail });
+    openSettingsDialog({ settings: view.settings, onSave: saveSettings, describeError: errorText });
   },
   dismissNotice() {
     setView({ notice: null });

@@ -18,19 +18,34 @@ pub struct AppState {
     pub running: Mutex<Option<omnimark_core::CancelToken>>,
 }
 
+/// Dependencies log at Warn and the app at Info. The HTML parser crates are silenced: at
+/// Trace they log every character of the converted documents.
+fn log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    use log::LevelFilter;
+    tauri_plugin_log::Builder::new()
+        .max_file_size(2_000_000)
+        .level(LevelFilter::Warn)
+        .level_for("omnimark_app_lib", LevelFilter::Info)
+        .level_for("omnimark_core", LevelFilter::Info)
+        .level_for("html5ever", LevelFilter::Off)
+        .level_for("markup5ever", LevelFilter::Off)
+        .build()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .max_file_size(2_000_000)
-                .build(),
-        )
+        .plugin(log_plugin())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
-            let default_out = app.path().document_dir()?.join("OmniMark");
+            let default_out = settings::default_output_dir(
+                app.path().document_dir().ok(),
+                app.path().home_dir().ok(),
+                app.path().app_data_dir().ok(),
+            )
+            .ok_or("no folder is available for converted files")?;
             let settings_path = config_dir.join("settings.json");
             let settings = settings::Settings::load(&settings_path, &default_out);
             app.asset_protocol_scope()

@@ -6,20 +6,33 @@ export interface SettingsDialogOptions {
   settings: Settings;
   /** Persists the draft; resolves once stored (the caller re-renders on a language change). */
   onSave(next: Settings): Promise<void>;
-  onError(error: unknown): void;
+  /** User-facing text for a failed action; shown inside the dialog, not behind its backdrop. */
+  describeError(error: unknown): string;
 }
 
 const MIN_WORKERS = 1;
 const MAX_WORKERS = 8;
 
+/** Shows `text` in the dialog's error line, or hides the line for `null`. */
+export function setDialogError(line: Pick<HTMLElement, 'textContent' | 'hidden'>, text: string | null): void {
+  line.textContent = text ?? '';
+  line.hidden = text === null;
+}
+
 /** Opens the modal settings dialog. The dialog removes itself when closed. */
-export function openSettingsDialog({ settings, onSave, onError }: SettingsDialogOptions): HTMLDialogElement {
+export function openSettingsDialog({ settings, onSave, describeError }: SettingsDialogOptions): HTMLDialogElement {
   const draft: Settings = { ...settings };
+  const errorLine = h('p', { class: 'dialog-error', role: 'alert', hidden: true });
+  const onError = (error: unknown): void => {
+    console.error(error);
+    setDialogError(errorLine, describeError(error));
+  };
 
   const folder = h('span', { class: 'field-path' }, draft.outputDir);
   folder.title = draft.outputDir;
   const changeFolder = h('button', { class: 'btn btn-small', type: 'button' }, t('action.change'));
   changeFolder.addEventListener('click', async () => {
+    setDialogError(errorLine, null);
     try {
       const picked = await pickFolder();
       if (picked) {
@@ -55,7 +68,10 @@ export function openSettingsDialog({ settings, onSave, onError }: SettingsDialog
   language.value = draft.language;
 
   const logs = h('button', { class: 'btn btn-quiet btn-small', type: 'button' }, svg(icons.folder), t('settings.openLogs'));
-  logs.addEventListener('click', () => openLogDir().catch(onError));
+  logs.addEventListener('click', () => {
+    setDialogError(errorLine, null);
+    openLogDir().catch(onError);
+  });
 
   const cancel = h('button', { class: 'btn', type: 'button' }, t('action.cancel'));
   const save = h('button', { class: 'btn btn-primary', type: 'submit' }, t('action.save')) as HTMLButtonElement;
@@ -84,6 +100,7 @@ export function openSettingsDialog({ settings, onSave, onError }: SettingsDialog
     ),
     h('div', { class: 'field field-inline' }, h('label', { for: 'set-lang' }, t('settings.language')), language),
     h('div', { class: 'field' }, logs),
+    errorLine,
     h('div', { class: 'dialog-actions' }, cancel, save),
   );
 
@@ -99,6 +116,7 @@ export function openSettingsDialog({ settings, onSave, onError }: SettingsDialog
     draft.extractImages = images.checked;
     draft.language = language.value as SettingsLanguage;
     save.disabled = true;
+    setDialogError(errorLine, null);
     try {
       await onSave(draft);
       dialog.close();

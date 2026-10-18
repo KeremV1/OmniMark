@@ -55,14 +55,26 @@ pub fn escape_table_cell(cell: &str) -> String {
     out
 }
 
+/// Widest table any converter emits; extra columns are dropped.
+pub const MAX_TABLE_COLUMNS: usize = 1_000;
+/// Upper bound on `rows * columns` of one emitted table; extra rows are dropped.
+pub const MAX_TABLE_CELLS: usize = 1_000_000;
+/// Warning added (once per document) when a table hits one of the caps above.
+pub const TABLE_WARNING: &str = "Large table truncated.";
+
 /// Renders rows as a GFM table. The first row is the header; rows are padded to the widest row.
-pub fn table(rows: &[Vec<String>]) -> String {
-    let columns = rows.iter().map(Vec::len).max().unwrap_or(0);
+/// Tables wider than [`MAX_TABLE_COLUMNS`] or larger than [`MAX_TABLE_CELLS`] are cut before
+/// padding; the returned flag is `true` when anything was dropped (callers add [`TABLE_WARNING`]).
+pub fn table(rows: &[Vec<String>]) -> (String, bool) {
+    let widest = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let columns = widest.min(MAX_TABLE_COLUMNS);
     if columns == 0 {
-        return String::new();
+        return (String::new(), false);
     }
-    let mut lines = Vec::with_capacity(rows.len() + 1);
-    for (index, row) in rows.iter().enumerate() {
+    let kept_rows = rows.len().min(MAX_TABLE_CELLS / columns);
+    let truncated = widest > columns || kept_rows < rows.len();
+    let mut lines = Vec::with_capacity(kept_rows + 1);
+    for (index, row) in rows[..kept_rows].iter().enumerate() {
         let cells: Vec<String> = (0..columns)
             .map(|c| row.get(c).map(|s| escape_table_cell(s)).unwrap_or_default())
             .collect();
@@ -71,7 +83,7 @@ pub fn table(rows: &[Vec<String>]) -> String {
             lines.push(format!("| {} |", vec!["---"; columns].join(" | ")));
         }
     }
-    lines.join("\n")
+    (lines.join("\n"), truncated)
 }
 
 /// Escapes emphasis markers in plain document text (same set markdownify escapes by default).
@@ -163,14 +175,39 @@ mod tests {
         ];
         assert_eq!(
             table(&rows),
-            "| name | age |\n| --- | --- |\n| Alice | 30 |"
+            (
+                "| name | age |\n| --- | --- |\n| Alice | 30 |".to_string(),
+                false
+            )
         );
         let ragged = vec![
             vec!["a".to_string()],
             vec!["b".to_string(), "c".to_string()],
         ];
-        assert_eq!(table(&ragged), "| a |  |\n| --- | --- |\n| b | c |");
-        assert_eq!(table(&[]), "");
+        assert_eq!(table(&ragged).0, "| a |  |\n| --- | --- |\n| b | c |");
+        assert_eq!(table(&[]), (String::new(), false));
+    }
+
+    #[test]
+    fn table_caps_columns_before_padding() {
+        let mut rows = vec![vec![String::new(); 5_000]];
+        rows.extend((0..5_000).map(|_| vec!["x".to_string()]));
+        let (md, truncated) = table(&rows);
+        assert!(truncated);
+        let header = md.lines().next().unwrap();
+        assert_eq!(header.matches('|').count(), MAX_TABLE_COLUMNS + 1);
+        assert!(md.lines().count() <= MAX_TABLE_CELLS / MAX_TABLE_COLUMNS + 1);
+    }
+
+    #[test]
+    fn table_caps_total_cells_by_dropping_rows() {
+        let rows: Vec<Vec<String>> = (0..600_000)
+            .map(|_| vec!["a".to_string(), "b".to_string(), "c".to_string()])
+            .collect();
+        let (md, truncated) = table(&rows);
+        assert!(truncated);
+        // Header + separator + the remaining body rows.
+        assert_eq!(md.lines().count(), MAX_TABLE_CELLS / 3 + 1);
     }
 
     #[test]

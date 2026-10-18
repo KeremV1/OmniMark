@@ -335,6 +335,9 @@ fn huge_grid_spans_are_capped_with_one_warning() {
     let mut parts = DocxParts::empty();
     let (md, doc) = run_body(&format!("<w:tbl>{row}{row}</w:tbl>"), &mut parts);
     let header = md.lines().next().unwrap();
-    assert_eq!(header.matches('|').count(), 201);
+    assert_eq!(
+        header.matches('|').count(),
+        crate::markdown::MAX_TABLE_COLUMNS + 1
+    );
     assert_eq!(doc.warnings, vec!["Large table truncated.".to_string()]);
 }

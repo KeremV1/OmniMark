@@ -20,6 +20,9 @@ const MAX_CHART_POINTS: usize = 10_000;
 const MAX_CHART_SERIES: usize = 256;
 /// Upper bound on `rows * series` cells; the row count shrinks to fit, so total allocation stays bounded.
 const MAX_CHART_CELLS: usize = 100_000;
+/// Elements plus attributes one XML part may hold; each becomes a heap allocation in the tree,
+/// so a small part made of `<a/>` runs is rejected instead of exhausting memory.
+const MAX_NODES: usize = 1_000_000;
 
 pub struct PptxConverter;
 
@@ -115,15 +118,25 @@ impl Node {
 fn parse_tree(bytes: &[u8]) -> Result<Node> {
     let mut reader = xml::reader(bytes);
     let mut stack: Vec<Node> = vec![Node::default()];
+    let mut nodes = 0usize;
+    let too_many = || ConvertError::corrupt("XML part has too many elements");
     loop {
         let event = reader.read_event().map_err(ConvertError::corrupt)?;
         match &event {
             Event::Start(e) | Event::Empty(e) => {
+                nodes += 1;
+                if nodes > MAX_NODES {
+                    return Err(too_many());
+                }
                 let mut node = Node {
                     name: xml::local_name(e.name().as_ref()).to_string(),
                     ..Node::default()
                 };
                 for attribute in e.attributes().flatten() {
+                    nodes += 1;
+                    if nodes > MAX_NODES {
+                        return Err(too_many());
+                    }
                     let key = attribute.key.as_ref().to_string();
                     if let Ok(value) =
                         attribute.normalized_value(quick_xml::XmlVersion::Implicit1_0)
@@ -535,8 +548,12 @@ impl Slide<'_, '_, '_> {
                 }
                 Kind::Table(rows) => {
                     if !rows.is_empty() {
+                        let (md, truncated) = markdown::table(&rows);
+                        if truncated {
+                            self.doc.warn_once(markdown::TABLE_WARNING);
+                        }
                         out.push('\n');
-                        out.push_str(&markdown::table(&rows));
+                        out.push_str(&md);
                         out.push_str("\n\n");
                     }
                 }
@@ -698,7 +715,9 @@ pub(crate) fn chart_markdown(chart_xml: &[u8]) -> Option<String> {
         Some(t) if !t.is_empty() => format!("### Chart: {t}"),
         _ => "### Chart".to_string(),
     };
-    Some(format!("{heading}\n\n{}\n", markdown::table(&rows)))
+    // MAX_CHART_SERIES and MAX_CHART_CELLS keep chart tables inside the shared table caps.
+    let (table, _) = markdown::table(&rows);
+    Some(format!("{heading}\n\n{table}\n"))
 }
 
 #[cfg(test)]
@@ -795,5 +814,90 @@ mod tests {
         assert_eq!(paras[1].bullet, Some(1));
         assert_eq!(paras[2].text, "Bullet & more");
         assert_eq!(paras[2].bullet, Some(0));
+    }
+
+    /// A minimal in-memory deck: `presentation.xml` body plus slide XML parts.
+    fn deck(presentation_body: &str, slides: &[&str]) -> Vec<u8> {
+        use std::io::Write;
+        let mut ids = String::new();
+        let mut rels = String::new();
+        for n in 1..=slides.len() {
+            ids.push_str(&format!(r#"<p:sldId id="{}" r:id="rId{n}"/>"#, 255 + n));
+            rels.push_str(&format!(
+                r#"<Relationship Id="rId{n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{n}.xml"/>"#
+            ));
+        }
+        let mut entries = vec![
+            (
+                "ppt/presentation.xml".to_string(),
+                format!(
+                    r#"<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst>{ids}</p:sldIdLst>{presentation_body}</p:presentation>"#
+                ),
+            ),
+            (
+                "ppt/_rels/presentation.xml.rels".to_string(),
+                format!(r#"<Relationships xmlns="rel">{rels}</Relationships>"#),
+            ),
+        ];
+        for (i, slide) in slides.iter().enumerate() {
+            entries.push((format!("ppt/slides/slide{}.xml", i + 1), slide.to_string()));
+        }
+        let mut buf = std::io::Cursor::new(Vec::new());
+        let mut writer = zip::ZipWriter::new(&mut buf);
+        for (name, data) in entries {
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(data.as_bytes()).unwrap();
+        }
+        writer.finish().unwrap();
+        buf.into_inner()
+    }
+
+    fn convert_deck(bytes: Vec<u8>) -> Result<Document> {
+        let input = Input {
+            path: "deck.pptx".into(),
+            bytes,
+        };
+        let options = crate::ConvertOptions::default();
+        let mut sink = crate::assets::NullAssetSink;
+        let cancel = crate::CancelToken::new();
+        let progress = |_: f32| {};
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut sink,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        PptxConverter.convert(&input, &mut ctx)
+    }
+
+    #[test]
+    fn huge_element_run_is_rejected_instead_of_exhausting_memory() {
+        let flood = "<a/>".repeat(MAX_NODES + 1);
+        let err = convert_deck(deck(&flood, &[])).unwrap_err();
+        assert_eq!(err.kind(), crate::ErrorKind::Corrupt);
+        // Attributes count toward the same cap.
+        let attrs = format!(
+            "<a {}/>",
+            (0..MAX_NODES)
+                .map(|i| format!(" b{i}=\"\""))
+                .collect::<String>()
+        );
+        assert!(parse_tree(attrs.as_bytes()).is_err());
+        assert!(parse_tree(b"<a><b/><c x=\"1\"/></a>").is_ok());
+    }
+
+    #[test]
+    fn wide_slide_table_is_capped_with_one_warning() {
+        let cells =
+            "<a:tc><a:txBody><a:p><a:r><a:t>c</a:t></a:r></a:p></a:txBody></a:tc>".repeat(1_500);
+        let slide = format!(
+            r#"<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr>{cells}</a:tr><a:tr>{cells}</a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>"#
+        );
+        let doc = convert_deck(deck("", &[&slide, &slide])).unwrap();
+        assert_eq!(doc.warnings, vec![markdown::TABLE_WARNING.to_string()]);
+        let header = doc.markdown.lines().find(|l| l.starts_with('|')).unwrap();
+        assert_eq!(header.matches('|').count(), markdown::MAX_TABLE_COLUMNS + 1);
     }
 }
