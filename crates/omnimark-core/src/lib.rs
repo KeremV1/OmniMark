@@ -1,16 +1,21 @@
 //! OmniMark conversion core: turns documents into Markdown.
 
+pub mod archive;
+pub mod assets;
 pub mod cancel;
 pub mod detect;
 pub mod document;
 pub mod error;
+pub mod formats;
 pub mod info;
 pub mod markdown;
-
-pub use info::{FileInfo, Input};
+pub mod ooxml;
+pub mod output;
+pub mod registry;
+pub mod xml;
 
 pub use cancel::CancelToken;
 pub use document::{ConvertOptions, Document, DEFAULT_MAX_FILE_SIZE};
 pub use error::{ConvertError, ErrorKind, Result};
-pub mod assets;
-pub mod output;
+pub use info::{FileInfo, Input};
+pub use registry::{convert_isolated, ConvertContext, Converter, Priority, Registry};
