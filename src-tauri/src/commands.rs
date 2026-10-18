@@ -124,20 +124,23 @@ fn read_limited(path: &Path, limit: usize) -> std::io::Result<OutputText> {
 
 #[tauri::command]
 pub fn read_output(state: State<'_, AppState>, path: PathBuf) -> Result<OutputText, AppError> {
-    let output_dir = current_settings(&state).output_dir;
-    let root = output_dir
-        .canonicalize()
-        .map_err(|_| AppError::InvalidPath(path.display().to_string()))?;
-    let file = path
-        .canonicalize()
-        .map_err(|_| AppError::InvalidPath(path.display().to_string()))?;
+    let file = resolve_output_path(&current_settings(&state).output_dir, &path)?;
+    Ok(read_limited(&file, PREVIEW_LIMIT)?)
+}
+
+/// Canonicalizes `path` and accepts it only if it is an existing `.md` file inside `root`.
+fn resolve_output_path(root: &Path, path: &Path) -> Result<PathBuf, AppError> {
+    let invalid = || AppError::InvalidPath(path.display().to_string());
+    let root = root.canonicalize().map_err(|_| invalid())?;
+    let file = path.canonicalize().map_err(|_| invalid())?;
     let is_markdown = file
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("md"));
-    if !file.starts_with(&root) || !is_markdown {
-        return Err(AppError::InvalidPath(path.display().to_string()));
+    if file.is_file() && is_markdown && file.starts_with(&root) {
+        Ok(file)
+    } else {
+        Err(invalid())
     }
-    Ok(read_limited(&file, PREVIEW_LIMIT)?)
 }
 
 fn open_dir(app: &AppHandle, dir: &Path) -> Result<(), AppError> {
@@ -178,7 +181,7 @@ pub fn set_settings(
     state: State<'_, AppState>,
     settings: Settings,
 ) -> Result<Settings, AppError> {
-    let settings = settings.sanitized();
+    let settings = settings.sanitized(&state.default_output_dir);
     settings.save(&state.settings_path)?;
     app.asset_protocol_scope()
         .allow_directory(&settings.output_dir, true)?;
@@ -189,6 +192,48 @@ pub fn set_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_output_path_confines_reads_to_markdown_inside_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("out");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::write(root.join("sub/a.md"), "x").unwrap();
+        std::fs::write(root.join("notes.txt"), "x").unwrap();
+        std::fs::write(tmp.path().join("secret.md"), "x").unwrap();
+
+        let ok = resolve_output_path(&root, &root.join("sub/a.md")).unwrap();
+        assert_eq!(ok, root.join("sub/a.md").canonicalize().unwrap());
+        // `..` traversal out of the root
+        let escape = root.join("sub/../../secret.md");
+        assert!(resolve_output_path(&root, &escape).is_err());
+        // wrong extension
+        assert!(resolve_output_path(&root, &root.join("notes.txt")).is_err());
+        // missing root, missing file, directory
+        assert!(resolve_output_path(&tmp.path().join("nope"), &root.join("sub/a.md")).is_err());
+        assert!(resolve_output_path(&root, &root.join("missing.md")).is_err());
+        std::fs::create_dir(root.join("dir.md")).unwrap();
+        assert!(resolve_output_path(&root, &root.join("dir.md")).is_err());
+    }
+
+    #[test]
+    fn resolve_output_path_rejects_symlink_escaping_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("out");
+        std::fs::create_dir_all(&root).unwrap();
+        let secret = tmp.path().join("secret.md");
+        std::fs::write(&secret, "x").unwrap();
+        let link = root.join("link.md");
+        #[cfg(windows)]
+        let made = std::os::windows::fs::symlink_file(&secret, &link);
+        #[cfg(unix)]
+        let made = std::os::unix::fs::symlink(&secret, &link);
+        if made.is_err() {
+            eprintln!("skipped: cannot create symlinks here");
+            return;
+        }
+        assert!(resolve_output_path(&root, &link).is_err());
+    }
 
     #[test]
     fn read_limited_cuts_at_a_utf8_boundary_and_flags_truncation() {

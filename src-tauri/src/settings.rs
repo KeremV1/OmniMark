@@ -44,13 +44,17 @@ impl Settings {
         std::fs::read_to_string(path)
             .ok()
             .and_then(|text| serde_json::from_str::<Settings>(&text).ok())
-            .map(Settings::sanitized)
+            .map(|s| s.sanitized(default_output_dir))
             .unwrap_or_else(|| Self::defaults(default_output_dir))
     }
 
-    /// Forces values into their valid ranges.
-    pub fn sanitized(mut self) -> Self {
+    /// Forces values into their valid ranges; an empty or relative output folder
+    /// is replaced by `default_output_dir`.
+    pub fn sanitized(mut self, default_output_dir: &Path) -> Self {
         self.workers = self.workers.clamp(1, 8);
+        if !self.output_dir.is_absolute() {
+            self.output_dir = default_output_dir.to_path_buf();
+        }
         self
     }
 
@@ -86,9 +90,26 @@ mod tests {
         let mut s = Settings::defaults(dir.path());
         s.workers = 99;
         s.language = Language::En;
-        let saved = s.sanitized();
+        let saved = s.sanitized(dir.path());
         saved.save(&path).unwrap();
         assert_eq!(Settings::load(&path, dir.path()), saved);
         assert_eq!(saved.workers, 8);
+    }
+
+    #[test]
+    fn empty_or_relative_output_dir_falls_back_to_the_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let default_out = dir.path().join("OmniMark");
+        for bad in ["", "relative/out", "."] {
+            let mut s = Settings::defaults(dir.path());
+            s.output_dir = PathBuf::from(bad);
+            assert_eq!(s.clone().sanitized(&default_out).output_dir, default_out);
+            // Same rule when a stored file holds the bad value.
+            let path = dir.path().join("settings.json");
+            std::fs::write(&path, serde_json::to_string(&s).unwrap()).unwrap();
+            assert_eq!(Settings::load(&path, &default_out).output_dir, default_out);
+        }
+        let ok = Settings::defaults(dir.path()).sanitized(&default_out);
+        assert_eq!(ok.output_dir, dir.path());
     }
 }

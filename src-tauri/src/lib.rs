@@ -14,6 +14,7 @@ pub struct AppState {
     pub registry: Arc<omnimark_core::Registry>,
     pub settings: Mutex<settings::Settings>,
     pub settings_path: std::path::PathBuf,
+    pub default_output_dir: std::path::PathBuf,
     pub running: Mutex<Option<omnimark_core::CancelToken>>,
 }
 
@@ -44,6 +45,7 @@ pub fn run() {
                 })),
                 settings: Mutex::new(settings),
                 settings_path,
+                default_output_dir: default_out,
                 running: Mutex::new(None),
             });
             Ok(())
