@@ -1,11 +1,13 @@
 use std::io::Cursor;
 
-use calamine::{open_workbook_auto_from_rs, Data, Reader, SheetVisible};
+use calamine::{
+    open_workbook_auto_from_rs, Data, DataRef, Reader, SheetVisible, Sheets, Xlsx, XlsxError,
+};
 use quick_xml::events::Event;
 
 use crate::archive::Archive;
 use crate::error::{ConvertError, Result};
-use crate::markdown;
+use crate::markdown::{self, MAX_TABLE_CELLS, MAX_TABLE_COLUMNS};
 use crate::ooxml::{parse_relationships, rels_path_for, resolve_part};
 use crate::registry::{ConvertContext, Converter};
 use crate::xml;
@@ -13,6 +15,11 @@ use crate::{Document, FileInfo, Input};
 
 const REL_DRAWING: &str = "/drawing";
 const REL_IMAGE: &str = "/image";
+/// Sheets whose used bounding box (rows × columns) is larger than this are skipped with a
+/// warning: a 2 KB file can name cells A1 and XFD1048576, a ~17-billion-cell box.
+const MAX_SHEET_CELLS: u64 = 10_000_000;
+/// Cells streamed between cancellation checks.
+const CANCEL_EVERY: usize = 65_536;
 
 pub struct XlsxConverter;
 
@@ -31,7 +38,7 @@ impl Converter for XlsxConverter {
     }
 
     fn convert(&self, input: &Input, ctx: &mut ConvertContext<'_>) -> Result<Document> {
-        let mut workbook = open_workbook_auto_from_rs(Cursor::new(input.bytes.clone()))
+        let mut workbook = open_workbook_auto_from_rs(Cursor::new(input.bytes.as_slice()))
             .map_err(ConvertError::corrupt)?;
         let extension = input
             .path
@@ -47,6 +54,7 @@ impl Converter for XlsxConverter {
             .map(|s| (s.name.clone(), s.visible == SheetVisible::Visible))
             .collect();
         let mut warnings = Vec::new();
+        let mut truncated = false;
         let mut parts = Vec::new();
         let total = sheets.len().max(1) as f32;
         for (index, (name, visible)) in sheets.iter().enumerate() {
@@ -55,18 +63,17 @@ impl Converter for XlsxConverter {
                 warnings.push(format!("Hidden sheet skipped: {name}"));
                 continue;
             }
-            let range = workbook
-                .worksheet_range(name)
-                .map_err(ConvertError::corrupt)?;
-            let grid: Vec<Vec<String>> = range
-                .rows()
-                .map(|row| row.iter().map(cell_text).collect())
-                .collect();
+            let Some((grid, cut)) = sheet_grid(&mut workbook, name, ctx)? else {
+                warnings.push(format!("Sheet {name} is too large and was skipped."));
+                continue;
+            };
             let grid = trim_grid(grid);
             let mut section = format!("## {name}");
             if !grid.is_empty() {
+                let (table, table_cut) = markdown::table(&grid);
+                truncated |= cut || table_cut;
                 section.push_str("\n\n");
-                section.push_str(&markdown::table(&grid).0);
+                section.push_str(&table);
             }
             if want_images {
                 match store_sheet_images(&input.bytes, name, ctx) {
@@ -84,8 +91,125 @@ impl Converter for XlsxConverter {
         }
         let mut document = Document::new(parts.join("\n\n"));
         document.warnings = warnings;
+        if truncated {
+            document.warn_once(markdown::TABLE_WARNING);
+        }
         Ok(document)
     }
+}
+
+/// The used cells of one sheet, already cut to the shared table caps, plus whether anything
+/// was cut. `None` when the sheet's bounding box exceeds [`MAX_SHEET_CELLS`] (skipped, with a warning).
+fn sheet_grid(
+    workbook: &mut Sheets<Cursor<&[u8]>>,
+    name: &str,
+    ctx: &ConvertContext<'_>,
+) -> Result<Option<(Vec<Vec<String>>, bool)>> {
+    match workbook {
+        Sheets::Xlsx(xlsx) => xlsx_grid(xlsx, name, ctx),
+        // Residual risk: calamine parses XLS and ODS sheets into dense ranges while the workbook
+        // opens (`Range::from_sparse`), before any check here can run; ODS caps that at 100M
+        // cells, XLS has no cap. Only the copy into strings below is bounded.
+        other => {
+            let range = other.worksheet_range(name).map_err(ConvertError::corrupt)?;
+            let (height, width) = range.get_size();
+            if height as u64 * width as u64 > MAX_SHEET_CELLS {
+                return Ok(None);
+            }
+            let (mut grid, cut) = empty_window(height, width);
+            for (row, cells) in grid.iter_mut().zip(range.rows()) {
+                for (slot, cell) in row.iter_mut().zip(cells) {
+                    *slot = cell_text(cell);
+                }
+            }
+            Ok(Some((grid, cut)))
+        }
+    }
+}
+
+/// Streams the sheet XML twice so calamine never builds the dense bounding-box grid
+/// (`worksheet_range` would): first for the bounds, then to fill the capped window.
+fn xlsx_grid(
+    xlsx: &mut Xlsx<Cursor<&[u8]>>,
+    name: &str,
+    ctx: &ConvertContext<'_>,
+) -> Result<Option<(Vec<Vec<String>>, bool)>> {
+    let mut bounds: Option<((u32, u32), (u32, u32))> = None;
+    let mut seen = 0usize;
+    {
+        let Some(mut reader) = cells_reader(xlsx, name)? else {
+            return Ok(Some((Vec::new(), false)));
+        };
+        while let Some(cell) = reader.next_cell().map_err(ConvertError::corrupt)? {
+            seen += 1;
+            if seen.is_multiple_of(CANCEL_EVERY) {
+                ctx.check_cancel()?;
+            }
+            if matches!(cell.get_value(), DataRef::Empty) {
+                continue;
+            }
+            let (r, c) = cell.get_position();
+            bounds = Some(match bounds {
+                None => ((r, c), (r, c)),
+                Some((start, end)) => (
+                    (start.0.min(r), start.1.min(c)),
+                    (end.0.max(r), end.1.max(c)),
+                ),
+            });
+        }
+    }
+    let Some((start, end)) = bounds else {
+        return Ok(Some((Vec::new(), false)));
+    };
+    let height = u64::from(end.0 - start.0) + 1;
+    let width = u64::from(end.1 - start.1) + 1;
+    if height * width > MAX_SHEET_CELLS {
+        return Ok(None);
+    }
+    let (mut grid, cut) = empty_window(height as usize, width as usize);
+    let Some(mut reader) = cells_reader(xlsx, name)? else {
+        return Ok(Some((Vec::new(), false)));
+    };
+    while let Some(cell) = reader.next_cell().map_err(ConvertError::corrupt)? {
+        seen += 1;
+        if seen.is_multiple_of(CANCEL_EVERY) {
+            ctx.check_cancel()?;
+        }
+        if matches!(cell.get_value(), DataRef::Empty) {
+            continue;
+        }
+        let (r, c) = cell.get_position();
+        let slot = grid
+            .get_mut((r - start.0) as usize)
+            .and_then(|row| row.get_mut((c - start.1) as usize));
+        if let Some(slot) = slot {
+            *slot = cell_text(&Data::from(cell.get_value().clone()));
+        }
+    }
+    Ok(Some((grid, cut)))
+}
+
+/// `None` for a sheet part that is not a worksheet (a chartsheet), like `worksheet_range`.
+fn cells_reader<'a, 'b>(
+    xlsx: &'a mut Xlsx<Cursor<&'b [u8]>>,
+    name: &str,
+) -> Result<Option<calamine::XlsxCellReader<'a, Cursor<&'b [u8]>>>> {
+    match xlsx.worksheet_cells_reader(name) {
+        Ok(reader) => Ok(Some(reader)),
+        Err(XlsxError::NotAWorksheet(_)) => Ok(None),
+        Err(error) => Err(ConvertError::corrupt(error)),
+    }
+}
+
+/// An empty `height × width` grid cut to the shared table caps, and whether it was cut.
+fn empty_window(height: usize, width: usize) -> (Vec<Vec<String>>, bool) {
+    let kept_width = width.min(MAX_TABLE_COLUMNS);
+    let kept_height = match kept_width {
+        0 => 0,
+        w => height.min(MAX_TABLE_CELLS / w),
+    };
+    let cut = kept_width < width || kept_height < height;
+    (vec![vec![String::new(); kept_width]; kept_height], cut)
 }
 
 /// Stores every image of a sheet and returns the Markdown image lines.
@@ -94,8 +218,8 @@ fn store_sheet_images(
     sheet_name: &str,
     ctx: &mut ConvertContext<'_>,
 ) -> Result<Vec<String>> {
-    let images = sheet_images(bytes, sheet_name)?;
     let mut archive = Archive::open(bytes)?;
+    let images = sheet_images(&mut archive, sheet_name)?;
     let mut lines = Vec::new();
     for (part, alt) in images {
         ctx.check_cancel()?;
@@ -171,10 +295,12 @@ fn read_part(archive: &mut Archive<'_>, part: &str) -> Result<Vec<u8>> {
 }
 
 /// Images of one sheet in drawing order: `(media part path, alt text)`.
-fn sheet_images(bytes: &[u8], sheet_name: &str) -> Result<Vec<(String, Option<String>)>> {
-    let mut archive = Archive::open(bytes)?;
+fn sheet_images(
+    archive: &mut Archive<'_>,
+    sheet_name: &str,
+) -> Result<Vec<(String, Option<String>)>> {
     let workbook_part = "xl/workbook.xml";
-    let workbook = read_part(&mut archive, workbook_part)?;
+    let workbook = read_part(archive, workbook_part)?;
     let mut sheet_rid = None;
     let mut reader = xml::reader(&workbook);
     loop {
@@ -191,8 +317,7 @@ fn sheet_images(bytes: &[u8], sheet_name: &str) -> Result<Vec<(String, Option<St
         }
     }
     let sheet_rid = sheet_rid.ok_or_else(|| ConvertError::Corrupt("sheet not found".into()))?;
-    let workbook_rels =
-        parse_relationships(&read_part(&mut archive, &rels_path_for(workbook_part))?)?;
+    let workbook_rels = parse_relationships(&read_part(archive, &rels_path_for(workbook_part))?)?;
     let sheet_target = workbook_rels
         .iter()
         .find(|r| r.id == sheet_rid && !r.external)
@@ -203,17 +328,17 @@ fn sheet_images(bytes: &[u8], sheet_name: &str) -> Result<Vec<(String, Option<St
     if !archive.contains(&sheet_rels_path) {
         return Ok(Vec::new());
     }
-    let sheet_rels = parse_relationships(&read_part(&mut archive, &sheet_rels_path)?)?;
+    let sheet_rels = parse_relationships(&read_part(archive, &sheet_rels_path)?)?;
     let mut images = Vec::new();
     for drawing in sheet_rels
         .iter()
         .filter(|r| !r.external && r.rel_type.ends_with(REL_DRAWING))
     {
         let drawing_part = resolve_part(&sheet_part, &drawing.target);
-        let drawing_xml = read_part(&mut archive, &drawing_part)?;
+        let drawing_xml = read_part(archive, &drawing_part)?;
         let drawing_rels_path = rels_path_for(&drawing_part);
         let drawing_rels = if archive.contains(&drawing_rels_path) {
-            parse_relationships(&read_part(&mut archive, &drawing_rels_path)?)?
+            parse_relationships(&read_part(archive, &drawing_rels_path)?)?
         } else {
             Vec::new()
         };
@@ -389,5 +514,100 @@ mod tests {
         };
         let err = XlsxConverter.convert(&input, &mut ctx).unwrap_err();
         assert_eq!(err.kind(), crate::ErrorKind::Corrupt);
+    }
+
+    /// A minimal in-memory workbook; each sheet is `(name, sheetData inner XML)`.
+    fn workbook(sheets: &[(&str, &str)]) -> Vec<u8> {
+        use std::io::Write;
+        let mut entries = vec![
+            (
+                "[Content_Types].xml".to_string(),
+                r#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/></Types>"#.to_string(),
+            ),
+            (
+                "_rels/.rels".to_string(),
+                r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#.to_string(),
+            ),
+        ];
+        let mut sheet_list = String::new();
+        let mut rels = String::new();
+        for (i, (name, data)) in sheets.iter().enumerate() {
+            let n = i + 1;
+            sheet_list.push_str(&format!(
+                r#"<sheet name="{name}" sheetId="{n}" r:id="rId{n}"/>"#
+            ));
+            rels.push_str(&format!(
+                r#"<Relationship Id="rId{n}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{n}.xml"/>"#
+            ));
+            entries.push((
+                format!("xl/worksheets/sheet{n}.xml"),
+                format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>{data}</sheetData></worksheet>"#
+                ),
+            ));
+        }
+        entries.push((
+            "xl/workbook.xml".to_string(),
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>{sheet_list}</sheets></workbook>"#
+            ),
+        ));
+        entries.push((
+            "xl/_rels/workbook.xml.rels".to_string(),
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}</Relationships>"#
+            ),
+        ));
+        let mut buf = std::io::Cursor::new(Vec::new());
+        let mut writer = zip::ZipWriter::new(&mut buf);
+        for (name, data) in entries {
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(data.as_bytes()).unwrap();
+        }
+        writer.finish().unwrap();
+        buf.into_inner()
+    }
+
+    fn convert_bytes(bytes: Vec<u8>) -> Document {
+        let input = Input {
+            path: "book.xlsx".into(),
+            bytes,
+        };
+        let options = crate::ConvertOptions::default();
+        let mut sink = crate::assets::NullAssetSink;
+        let cancel = crate::CancelToken::new();
+        let progress = |_: f32| {};
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut sink,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        XlsxConverter.convert(&input, &mut ctx).unwrap()
+    }
+
+    #[test]
+    fn sparse_sheet_with_a_huge_bounding_box_is_skipped_with_a_warning() {
+        let sparse = r#"<row r="1"><c r="A1"><v>1</v></c></row><row r="1048576"><c r="XFD1048576"><v>2</v></c></row>"#;
+        let normal = r#"<row r="1"><c r="A1"><v>7</v></c><c r="B1"><v>8</v></c></row>"#;
+        let doc = convert_bytes(workbook(&[("Big", sparse), ("Small", normal)]));
+        assert_eq!(
+            doc.warnings,
+            vec!["Sheet Big is too large and was skipped.".to_string()]
+        );
+        assert_eq!(doc.markdown, "## Small\n\n| 7 | 8 |\n| --- | --- |");
+    }
+
+    #[test]
+    fn wide_sheet_is_cut_to_the_table_caps_with_one_warning() {
+        // ALL is column 1000 and BXX column 2000: the bounding box is small but too wide.
+        let wide = r#"<row r="1"><c r="A1"><v>1</v></c><c r="ALL1"><v>9</v></c><c r="BXX1"><v>2</v></c></row><row r="2"><c r="A2"><v>3</v></c></row>"#;
+        let doc = convert_bytes(workbook(&[("One", wide), ("Two", wide)]));
+        assert_eq!(doc.warnings, vec![markdown::TABLE_WARNING.to_string()]);
+        let header = doc.markdown.lines().nth(2).unwrap();
+        assert_eq!(header.matches('|').count(), markdown::MAX_TABLE_COLUMNS + 1);
+        assert!(header.starts_with("| 1 |"));
     }
 }
