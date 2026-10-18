@@ -113,6 +113,11 @@ pub fn link_target(path: &str) -> String {
             ')' => out.push_str("%29"),
             '<' => out.push_str("%3C"),
             '>' => out.push_str("%3E"),
+            '%' => out.push_str("%25"),
+            '#' => out.push_str("%23"),
+            '?' => out.push_str("%3F"),
+            '[' => out.push_str("%5B"),
+            ']' => out.push_str("%5D"),
             _ => out.push(ch),
         }
     }
@@ -189,5 +194,13 @@ mod tests {
             "rapor%20%282%29_assets/image%201.png"
         );
         assert_eq!(link_target("çizim<1>.png"), "çizim%3C1%3E.png");
+    }
+
+    #[test]
+    fn link_target_encodes_url_structural_characters() {
+        assert_eq!(
+            link_target("Q1 #2 100%_assets/a[1]?.png"),
+            "Q1%20%232%20100%25_assets/a%5B1%5D%3F.png"
+        );
     }
 }
