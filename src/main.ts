@@ -67,7 +67,7 @@ function applyLanguage(settings: Settings): void {
   document.documentElement.lang = lang;
 }
 
-type Ui = { update(view: View): void; listHasFocus(): boolean; closeMenu(): boolean };
+type Ui = { update(view: View): void; listHasFocus(): boolean; closeMenu(): boolean; destroy(): void };
 let ui: Ui | null = null;
 
 function setView(next: Partial<View>): void {
@@ -205,7 +205,8 @@ function createNotice() {
 function mount(): void {
   const app = document.querySelector<HTMLElement>('#app');
   if (!app) return;
-  document.querySelectorAll('.menu').forEach((m) => m.remove());
+  // Tear down the previous window's global listeners and observers before rebuilding.
+  ui?.destroy();
 
   const toolbar = createToolbar(actions);
   const notice = createNotice();
@@ -237,6 +238,7 @@ function mount(): void {
     },
     listHasFocus: () => list.hasFocus(),
     closeMenu: () => list.closeMenu(),
+    destroy: () => list.destroy(),
   };
   ui.update(view);
 }

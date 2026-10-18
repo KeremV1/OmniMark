@@ -18,7 +18,20 @@ describe('preview markdown', () => {
 
   it('resolves only relative image sources next to the Markdown file', () => {
     expect(isRelativeSrc('rapor_assets/image1.png')).toBe(true);
-    for (const src of ['https://x/y.png', 'data:image/png;base64,AA', '/etc/x.png', 'C:\\x.png', '#a', '']) {
+    expect(isRelativeSrc('a..b/c..png')).toBe(true);
+    for (const src of [
+      'https://x/y.png',
+      'data:image/png;base64,AA',
+      '/etc/x.png',
+      'C:\\x.png',
+      '#a',
+      '',
+      '../secret.png',
+      'a_assets/../../x.png',
+      'a_assets\\..\\x.png',
+      '%2E%2E/x.png',
+      'a/%2e%2e/%2e%2e/x.png',
+    ]) {
       expect(isRelativeSrc(src)).toBe(false);
     }
     expect(assetPath('C:\\Users\\k\\OmniMark\\rapor.md', 'rapor_assets/g%C3%B6rsel%201.png')).toBe(

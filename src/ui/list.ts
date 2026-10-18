@@ -11,6 +11,8 @@ export interface List {
   hasFocus(): boolean;
   /** Closes the row menu; returns whether one was open. */
   closeMenu(): boolean;
+  /** Removes the global listeners, the ResizeObserver and the menu element. */
+  destroy(): void;
 }
 
 interface Row {
@@ -54,11 +56,15 @@ export function createList(actions: Actions): List {
   );
   const el = h('section', { class: 'list' }, grid, noMatch);
 
-  new ResizeObserver(() => el.classList.toggle('compact', el.clientWidth < COMPACT_WIDTH)).observe(el);
+  // Everything global this list installs is torn down by `destroy()` (on re-mount).
+  const lifetime = new AbortController();
+  const resize = new ResizeObserver(() => el.classList.toggle('compact', el.clientWidth < COMPACT_WIDTH));
+  resize.observe(el);
+  lifetime.signal.addEventListener('abort', () => resize.disconnect());
 
   const rows = new Map<string, Row>();
   let current: View | null = null;
-  const menu = createMenu(actions, () => current);
+  const menu = createMenu(actions, () => current, lifetime.signal);
 
   function itemOf(path: string): QueueItem | undefined {
     return current?.queue.items.find((i) => i.path === path);
@@ -217,6 +223,9 @@ export function createList(actions: Actions): List {
     closeMenu() {
       return menu.close();
     },
+    destroy() {
+      lifetime.abort();
+    },
   };
 }
 
@@ -227,7 +236,23 @@ interface Menu {
 }
 
 /** The row `⋯` menu: one shared popover, keyboard navigable. */
-function createMenu(actions: Actions, view: () => View | null): Menu {
+export interface MenuDismissal {
+  pointerdown(target: Node): void;
+  resize(): void;
+  scroll(target: Node): void;
+}
+
+/**
+ * Window-wide listeners of the row menu. They live until `signal` aborts, so a re-mount
+ * (language change) does not leave dead listeners holding the old DOM. Exported for tests.
+ */
+export function bindMenuDismissal(doc: EventTarget, win: EventTarget, signal: AbortSignal, on: MenuDismissal): void {
+  doc.addEventListener('pointerdown', (ev) => on.pointerdown(ev.target as Node), { signal });
+  win.addEventListener('resize', () => on.resize(), { signal });
+  doc.addEventListener('scroll', (ev) => on.scroll(ev.target as Node), { capture: true, signal });
+}
+
+function createMenu(actions: Actions, view: () => View | null, signal: AbortSignal): Menu {
   const showFile = h('button', { class: 'menu-item', type: 'button', role: 'menuitem' }, t('action.showFile')) as HTMLButtonElement;
   const retry = h('button', { class: 'menu-item', type: 'button', role: 'menuitem' }, t('action.retry')) as HTMLButtonElement;
   const remove = h('button', { class: 'menu-item', type: 'button', role: 'menuitem' }, t('action.removeFromList')) as HTMLButtonElement;
@@ -318,17 +343,16 @@ function createMenu(actions: Actions, view: () => View | null): Menu {
       close();
     }
   });
-  document.addEventListener('pointerdown', (ev) => {
-    if (path && !el.contains(ev.target as Node) && ev.target !== anchor && !anchor?.contains(ev.target as Node)) close();
-  });
-  window.addEventListener('resize', () => place());
-  document.addEventListener(
-    'scroll',
-    (ev) => {
-      if (!el.contains(ev.target as Node)) close();
+  bindMenuDismissal(document, window, signal, {
+    pointerdown(target) {
+      if (path && !el.contains(target) && target !== anchor && !anchor?.contains(target)) close();
     },
-    true,
-  );
+    resize: () => place(),
+    scroll(target) {
+      if (!el.contains(target)) close();
+    },
+  });
+  signal.addEventListener('abort', () => el.remove());
 
   return {
     toggle(p, a) {

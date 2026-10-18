@@ -13,17 +13,22 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 /** True for `img.png` or `report_assets/img.png`; false for URLs, data URIs, anchors and absolute paths. */
 export function isRelativeSrc(src: string): boolean {
-  return src.length > 0 && !SCHEME.test(src) && !src.startsWith('/') && !src.startsWith('\\') && !src.startsWith('#');
+  if (src.length === 0 || SCHEME.test(src) || src.startsWith('/') || src.startsWith('\\') || src.startsWith('#')) return false;
+  // Defence in depth (the asset scope already confines reads): never climb out of the output folder.
+  return !decoded(src).split(/[\\/]/).includes('..');
+}
+
+function decoded(src: string): string {
+  try {
+    return decodeURI(src);
+  } catch {
+    return src;
+  }
 }
 
 /** Resolves a relative image `src` against the folder of the Markdown file, in that file's path style. */
 export function assetPath(markdownPath: string, src: string): string {
   const sep = separatorOf(markdownPath);
-  let rel = src;
-  try {
-    rel = decodeURI(src);
-  } catch {
-    // Not valid percent-encoding: keep the raw text.
-  }
+  const rel = decoded(src);
   return `${dirName(markdownPath)}${sep}${sep === '\\' ? rel.replace(/\//g, '\\') : rel}`;
 }
