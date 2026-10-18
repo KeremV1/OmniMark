@@ -1,0 +1,13 @@
+[
+  { "file": "test.docx",
+    "include": ["314b0a30-5b04-470b-b9f7-eed2c2bec74a", "49e168b7-d2ae-407f-a055-2167576f39a1", "## d666f1f7-46cb-42bd-9a39-9a39cf2a509f",
+                "# Abstract", "# Introduction", "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation"],
+    "regex": ["!\\[[^\\]]*\\]\\(test_assets/[^)]+\\.png\\)"],
+    "exclude": ["data:image/png;base64"] },
+  { "file": "test.docx", "extract_images": false,
+    "include": ["# Abstract"], "regex": ["!\\[[^\\]]*\\]\\(\\)"], "exclude": ["test_assets/"] },
+  { "file": "test_with_comment.docx",
+    "include": ["314b0a30-5b04-470b-b9f7-eed2c2bec74a", "# Abstract", "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation"],
+    "note": "Comments are out of scope for M1." },
+  { "file": "rlink.docx", "note": "External image links must never be fetched; conversion must succeed." }
+]

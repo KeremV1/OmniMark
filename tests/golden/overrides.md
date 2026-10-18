@@ -14,3 +14,6 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 | (satır içi testler) | Grafik sonrası satır sonu yok, `10.0` | Satır sonu var, önbellek değeri (`10`) | Yapışan metin hatası; pandas/py float biçimi |
 | PDF fixture'ları | pdfminer/pdfplumber çıktısıyla birebir eşitlik | İçerik ve yapı doğrulaması; başlıklar `#` ile, madde imleri `- ` ile | pdfium farklı metin motoru; MarkItDown başlık üretmiyor |
 | PDF form sayfaları | Tablo satırı ile düz metin satırı bitişik (satır sonu ile) | Tablo öncesi ve sonrası boş satır | Bitişik düz satır, Markdown'da tablo satırı sayılmasın |
+| test.docx | Görsel `data:image/png;base64...` olarak kesilir | `test_assets/imageN.png` dosyasına çıkarılır | Görseller kaybolmasın |
+| test_with_comment.docx | Yorum metinleri (style_map ile) | Yorumlar yok | M1 kapsamı dışı |
+| (satır içi testler) | Tablonun ilk satırı boş başlık | İlk satır başlık | Okunabilir GFM tablosu |
