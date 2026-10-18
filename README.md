@@ -2,19 +2,20 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** M1 kodlaması sürüyor (10/19 görev). Çekirdek, CLI ve TXT/JSON, CSV, HTML, Excel, PowerPoint dönüştürücüleri hazır; Word, PDF ve masaüstü arayüzü yazılıyor.
+> **Durum:** M1 kodlaması sürüyor (13/19 görev). Tüm M1 dönüştürücüleri (TXT/JSON, CSV, HTML, Excel, Word, PowerPoint, PDF) ve Tauri arka ucu hazır; Word formülleri ve arayüz yazılıyor.
 
 ## Kaldığımız yer
 
 **Geldiğimiz nokta (2026-10-18):**
-- **Çekirdek altyapı tamam (Görev 1-5):** tür tespiti, karakter kodlaması, görsel çıkarma, çakışmasız çıktı adlandırma, dönüştürücü kayıt defteri, çökme yalıtımı, güvenli zip/XML okuma, `omnimark` komut satırı aracı, golden testler, pdfium indirme betikleri.
-- **Hazır dönüştürücüler:** TXT/MD/JSON (Görev 6), CSV ve `;`/sekme tespiti (7), HTML (8), Excel XLSX/XLS/ODS (9), PowerPoint (12). Kötü niyetli dosyalara karşı sınırlar eklendi (çok derin HTML, dev grafik verisi). 69 test geçiyor.
-- **İncelemede:** Word (Görev 10), PDF (Görev 13, düzeltme turunda). **Yazılıyor:** Tauri arka ucu (Görev 14).
+- **Çekirdek altyapı (Görev 1-5):** tür tespiti, karakter kodlaması, görsel çıkarma, çakışmasız çıktı adlandırma, dönüştürücü kayıt defteri, çökme yalıtımı, güvenli zip/XML okuma, `omnimark` komut satırı aracı, golden testler, pdfium indirme betikleri.
+- **Dönüştürücüler (Görev 6-10, 12-13):** TXT/MD/JSON, CSV (`;`/sekme tespiti), HTML, Excel (XLSX/XLS/ODS), Word (başlık, liste, tablo, görsel, dipnot), PowerPoint (slayt, tablo, grafik, not), PDF (pdfium; tablo ve form tespiti).
+- **Masaüstü arka ucu (Görev 14):** Tauri 2 kabuğu, paralel dönüştürme kuyruğu, ilerleme olayları, ayarlar. Arayüz yalnızca çıktı klasöründeki `.md` dosyalarını okuyabilir.
+- **Güvenlik:** kötü niyetli dosyalara karşı sınırlar eklendi (çok derin HTML, dev tablo ve grafik verisi, harici bağlantılar asla açılmaz). 121 test geçiyor.
 - **Dal:** kod [`m1` dalında](https://github.com/KeremV1/OmniMark/tree/m1); M1 bitince `main`'e birleşecek.
 
 **Sıradaki iş:**
-1. Word ve PDF dönüştürücülerinin incelemesini bitirmek; ardından Word formülleri (Görev 11).
-2. Masaüstü uygulaması: Tauri arka ucu (14), arayüz çekirdeği (15), arayüz (16).
+1. Word formülleri → LaTeX (Görev 11, incelemede) ve arayüz çekirdeği (Görev 15, yazılıyor).
+2. Arayüz: pencere düzeni, sürükle-bırak, önizleme, ayarlar (Görev 16).
 3. Simgeler, CI, ölçüm ve M1 kapanışı (Görev 17-19).
 
 Ayrıntı: [HANDOFF.md](HANDOFF.md) · [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md) · [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md)
@@ -61,7 +62,7 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 
 | Aşama | Kapsam | Yol haritası adımları | Durum | İlerleme |
 | --- | --- | --- | --- | --- |
-| **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | 🔄 Sürüyor | 10/19 görev |
+| **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | 🔄 Sürüyor | 13/19 görev |
 | **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | ⏳ Planlandı | — |
 | **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏳ Planlandı | — |
 | **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans iyileştirmeleri | 7 | ⏳ Planlandı | — |
@@ -83,12 +84,14 @@ Durum işaretleri: ✅ tamamlandı · 🔄 sürüyor · ⏳ planlandı.
 
 ## Geliştirme
 
-Henüz kod yok. Gereksinimler:
+Gereksinimler:
 
 - Rust 1.90+ (Windows'ta MSVC toolchain)
 - Windows için Visual Studio 2022 Build Tools (C++ iş yükü) ve WebView2
 - Node.js 20+
-- PDF için pdfium: `scripts/fetch-pdfium` betiğiyle sabit bir sürümden indirilecek ([bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries))
+- PDF için pdfium: **derlemeden önce** `scripts/fetch-pdfium.ps1` (Windows) ya da `scripts/fetch-pdfium.sh` (macOS/Linux) çalıştırılmalı. Sabit sürüm `chromium/8066`, SHA-256 doğrulamalı ([bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries)). `vendor/pdfium` olmadan masaüstü uygulaması derlenmez.
+
+Komutlar: `cargo test --workspace` (testler), `cargo run -p omnimark-cli -- <dosya>` (komut satırı), `npm ci && npm run tauri dev` (masaüstü uygulaması).
 
 Araştırma notları:
 
