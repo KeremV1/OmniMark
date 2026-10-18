@@ -14,11 +14,8 @@ serde.workspace = true
 infer.workspace = true
 chardetng.workspace = true
 encoding_rs.workspace = true
-<<<<<<< HEAD
 calamine.workspace = true
-=======
 htmd.workspace = true
->>>>>>> m1-task-8
 
 [dev-dependencies]
 tempfile.workspace = true
