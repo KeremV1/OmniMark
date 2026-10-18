@@ -14,6 +14,8 @@ use crate::{Document, FileInfo, Input};
 const ROW_TOLERANCE: i128 = 180_000;
 /// Guards the recursive tree walk against hostile, deeply nested XML.
 const MAX_DEPTH: usize = 256;
+/// Chart points with an index at or above this are ignored, so a hostile `c:pt@idx` cannot force a huge allocation.
+const MAX_CHART_POINTS: usize = 10_000;
 
 pub struct PptxConverter;
 
@@ -609,7 +611,11 @@ fn cache_points(node: &Node) -> Vec<(usize, String)> {
     let mut pts = Vec::new();
     node.find_all("pt", &mut pts);
     for pt in pts {
-        if let Some(idx) = pt.attr("idx").and_then(|i| i.trim().parse::<usize>().ok()) {
+        if let Some(idx) = pt
+            .attr("idx")
+            .and_then(|i| i.trim().parse::<usize>().ok())
+            .filter(|idx| *idx < MAX_CHART_POINTS)
+        {
             let value = pt.child("v").map(|v| v.text.clone()).unwrap_or_default();
             points.push((idx, value));
         }
@@ -730,6 +736,23 @@ mod tests {
         assert_eq!(
             chart_markdown(xml).unwrap(),
             "### Chart: Revenue\n\n| Category | Series A |\n| --- | --- |\n| C0 | 10 |\n| C1 | 2003 |\n"
+        );
+    }
+
+    #[test]
+    fn chart_ignores_points_beyond_the_cap() {
+        let xml = br#"<c:chartSpace xmlns:c="c"><c:chart><c:plotArea><c:barChart>
+          <c:ser><c:cat><c:strRef><c:strCache><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="4000000000"><c:v>Z</c:v></c:pt></c:strCache></c:strRef></c:cat>
+            <c:val><c:numRef><c:numCache><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="4000000000"><c:v>2</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser>
+        </c:barChart></c:plotArea></c:chart></c:chartSpace>"#;
+        assert_eq!(
+            chart_markdown(xml).unwrap(),
+            "### Chart
+
+| Category | Series 1 |
+| --- | --- |
+| A | 1 |
+"
         );
     }
 
