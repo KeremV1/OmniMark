@@ -20,6 +20,9 @@ const MAX_CHART_POINTS: usize = 10_000;
 const MAX_CHART_SERIES: usize = 256;
 /// Upper bound on `rows * series` cells; the row count shrinks to fit, so total allocation stays bounded.
 const MAX_CHART_CELLS: usize = 100_000;
+/// Elements plus attributes one XML part may hold; each becomes a heap allocation in the tree,
+/// so a small part made of `<a/>` runs is rejected instead of exhausting memory.
+const MAX_NODES: usize = 1_000_000;
 
 pub struct PptxConverter;
 
@@ -115,15 +118,25 @@ impl Node {
 fn parse_tree(bytes: &[u8]) -> Result<Node> {
     let mut reader = xml::reader(bytes);
     let mut stack: Vec<Node> = vec![Node::default()];
+    let mut nodes = 0usize;
+    let too_many = || ConvertError::corrupt("XML part has too many elements");
     loop {
         let event = reader.read_event().map_err(ConvertError::corrupt)?;
         match &event {
             Event::Start(e) | Event::Empty(e) => {
+                nodes += 1;
+                if nodes > MAX_NODES {
+                    return Err(too_many());
+                }
                 let mut node = Node {
                     name: xml::local_name(e.name().as_ref()).to_string(),
                     ..Node::default()
                 };
                 for attribute in e.attributes().flatten() {
+                    nodes += 1;
+                    if nodes > MAX_NODES {
+                        return Err(too_many());
+                    }
                     let key = attribute.key.as_ref().to_string();
                     if let Ok(value) =
                         attribute.normalized_value(quick_xml::XmlVersion::Implicit1_0)
@@ -857,6 +870,22 @@ mod tests {
             progress: &progress,
         };
         PptxConverter.convert(&input, &mut ctx)
+    }
+
+    #[test]
+    fn huge_element_run_is_rejected_instead_of_exhausting_memory() {
+        let flood = "<a/>".repeat(MAX_NODES + 1);
+        let err = convert_deck(deck(&flood, &[])).unwrap_err();
+        assert_eq!(err.kind(), crate::ErrorKind::Corrupt);
+        // Attributes count toward the same cap.
+        let attrs = format!(
+            "<a {}/>",
+            (0..MAX_NODES)
+                .map(|i| format!(" b{i}=\"\""))
+                .collect::<String>()
+        );
+        assert!(parse_tree(attrs.as_bytes()).is_err());
+        assert!(parse_tree(b"<a><b/><c x=\"1\"/></a>").is_ok());
     }
 
     #[test]
