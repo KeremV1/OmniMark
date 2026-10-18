@@ -17,3 +17,4 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 | test.docx | Görsel `data:image/png;base64...` olarak kesilir | `test_assets/imageN.png` dosyasına çıkarılır | Görseller kaybolmasın |
 | test_with_comment.docx | Yorum metinleri (style_map ile) | Yorumlar yok | M1 kapsamı dışı |
 | (satır içi testler) | Tablonun ilk satırı boş başlık | İlk satır başlık | Okunabilir GFM tablosu |
+| equations.docx | `$m=1$`, `$$…$$` | Aynı; `m:sty=p` yalnız ASCII harf içeren run'ları `\mathrm{}` yapar, görünmez işlemciler (U+2061) atılır | Rakam/işleç run'ları zaten dik; `$m=1$` bozulmasın |

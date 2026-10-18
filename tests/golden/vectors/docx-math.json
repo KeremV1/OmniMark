@@ -1,0 +1,6 @@
+[
+  { "file": "equations.docx",
+    "include": ["$m=1$"],
+    "regex": ["\\$\\$(.+?)\\$\\$"],
+    "exclude": ["\\_{"] }
+]
