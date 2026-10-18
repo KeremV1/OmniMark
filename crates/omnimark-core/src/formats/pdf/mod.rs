@@ -4,7 +4,7 @@ pub(crate) mod form;
 pub(crate) mod layout;
 
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 use pdfium_render::prelude::*;
 
@@ -29,8 +29,10 @@ pub fn pdfium_library_file_name() -> &'static str {
 const BOLD_WEIGHT: u32 = 600;
 const BOLD_FONT_NAMES: [&str; 5] = ["Bold", "Black", "Heavy", "-Medi", "Semibold"];
 
-/// pdfium is initialised once per process (the first successful library path wins).
-static PDFIUM: OnceLock<std::result::Result<Mutex<Pdfium>, String>> = OnceLock::new();
+/// The bound pdfium, shared by all conversions (one lock serialises PDF work). Only a
+/// successful bind is cached, so a missing or half-downloaded library can be retried later.
+/// Once bound, the first library path stays in use; a later call with another path reuses it.
+static PDFIUM: Mutex<Option<Pdfium>> = Mutex::new(None);
 
 pub struct PdfConverter {
     library: Option<PathBuf>,
@@ -65,15 +67,14 @@ impl Converter for PdfConverter {
             Some(path) => return Err(missing_library(&path.display().to_string())),
             None => return Err(missing_library("(no path configured)")),
         };
-        let cell = PDFIUM.get_or_init(|| {
-            Pdfium::bind_to_library(library)
-                .map(|bindings| Mutex::new(Pdfium::new(bindings)))
-                .map_err(|e| format!("{}: {e}", library.display()))
-        });
-        let pdfium = match cell {
-            Ok(pdfium) => pdfium.lock().unwrap_or_else(|e| e.into_inner()),
-            Err(message) => return Err(ConvertError::MissingComponent(message.clone())),
-        };
+        let mut guard = PDFIUM.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.is_none() {
+            let bindings = Pdfium::bind_to_library(library).map_err(|e| {
+                ConvertError::MissingComponent(format!("{}: {e}", library.display()))
+            })?;
+            *guard = Some(Pdfium::new(bindings));
+        }
+        let pdfium = guard.as_ref().expect("pdfium bound above");
 
         let document = match pdfium.load_pdf_from_byte_slice(&input.bytes, None) {
             Ok(document) => document,
@@ -239,5 +240,120 @@ mod tests {
         };
         let err = converter.convert(&input, &mut ctx).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingComponent);
+    }
+
+    fn run(converter: &PdfConverter, name: &str, bytes: Vec<u8>) -> Result<Document> {
+        let input = Input {
+            path: name.into(),
+            bytes,
+        };
+        let options = ConvertOptions::default();
+        let mut sink = NullAssetSink;
+        let cancel = CancelToken::new();
+        let progress = |_: f32| {};
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut sink,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        converter.convert(&input, &mut ctx)
+    }
+
+    fn fixture(name: &str) -> Vec<u8> {
+        std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../tests/fixtures/markitdown/files")
+                .join(name),
+        )
+        .unwrap()
+    }
+
+    fn real_library() -> Option<PathBuf> {
+        if let Some(path) = std::env::var_os("OMNIMARK_PDFIUM_PATH") {
+            return Some(PathBuf::from(path));
+        }
+        let vendored = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../vendor/pdfium")
+            .join(pdfium_library_file_name());
+        vendored.is_file().then_some(vendored)
+    }
+
+    #[test]
+    fn failed_bind_is_retried_with_the_real_library() {
+        let Some(library) = real_library() else {
+            eprintln!("pdfium not available; skipping");
+            return;
+        };
+        let bad = PdfConverter::new(Some(PathBuf::from("Z:/nope/pdfium.dll")));
+        let err = run(&bad, "test.pdf", fixture("test.pdf")).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingComponent);
+        let good = PdfConverter::new(Some(library));
+        let doc = run(&good, "test.pdf", fixture("test.pdf")).unwrap();
+        assert!(doc.markdown.contains("contemporaneous exploration"));
+        // Once bound, a nonexistent path still fails fast without losing the binding.
+        assert!(run(&bad, "test.pdf", fixture("test.pdf")).is_err());
+        assert!(run(&good, "test.pdf", fixture("test.pdf")).is_ok());
+    }
+
+    #[test]
+    fn garbage_bytes_are_corrupt() {
+        let Some(library) = real_library() else {
+            eprintln!("pdfium not available; skipping");
+            return;
+        };
+        let converter = PdfConverter::new(Some(library));
+        let err = run(&converter, "x.pdf", b"this is not a pdf".to_vec()).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Corrupt);
+    }
+
+    #[test]
+    fn scanned_page_gives_empty_output_and_exact_warning() {
+        let Some(library) = real_library() else {
+            eprintln!("pdfium not available; skipping");
+            return;
+        };
+        let converter = PdfConverter::new(Some(library));
+        let doc = run(
+            &converter,
+            "scan.pdf",
+            fixture("MEDRPT-2024-PAT-3847_medical_report_scan.pdf"),
+        )
+        .unwrap();
+        assert_eq!(doc.markdown, "");
+        assert!(!doc.warnings.is_empty());
+        assert_eq!(
+            doc.warnings[0],
+            "Page 1 has no text layer (scanned?); OCR is planned for a later version."
+        );
+    }
+
+    #[test]
+    fn real_pdfs_produce_headings_or_bullets() {
+        let Some(library) = real_library() else {
+            eprintln!("pdfium not available; skipping");
+            return;
+        };
+        let converter = PdfConverter::new(Some(library));
+        let mut found = Vec::new();
+        for name in [
+            "RECEIPT-2024-TXN-98765_retail_purchase.pdf",
+            "test.pdf",
+            "masterformat_partial_numbering.pdf",
+            "pdf_cleanup_plain.pdf",
+        ] {
+            let doc = run(&converter, name, fixture(name)).unwrap();
+            if doc
+                .markdown
+                .lines()
+                .any(|l| l.starts_with("# ") || l.starts_with("- "))
+            {
+                found.push(name);
+            }
+        }
+        assert!(
+            found.contains(&"RECEIPT-2024-TXN-98765_retail_purchase.pdf"),
+            "{found:?}"
+        );
     }
 }
