@@ -1,0 +1,6 @@
+[
+  { "file": "test.json", "include": ["5b64c88c-b3c3-4510-bcb8-da0b200602d8", "9700dc99-6685-40b4-9a3a-5e406dcb37f3", "```json"] },
+  { "file": "json_late_non_ascii.json",
+    "include": ["5b64c88c-b3c3-4510-bcb8-da0b200602d8", "9700dc99-6685-40b4-9a3a-5e406dcb37f3", "\"notes\": \"Late Unicode: café, 日本語, 😀\""],
+    "exclude": ["�", "cafÃ©"] }
+]
