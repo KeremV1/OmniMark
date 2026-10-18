@@ -21,6 +21,22 @@ pub struct Settings {
     pub language: Language,
 }
 
+/// Folder name created under the base folder for converted files.
+const OUTPUT_FOLDER: &str = "OmniMark";
+
+/// Default output folder: `<Documents>/OmniMark`; without a Documents folder (Linux without
+/// XDG user dirs) `<home>/OmniMark`, then `<app data>/OmniMark`.
+pub fn default_output_dir(
+    documents: Option<PathBuf>,
+    home: Option<PathBuf>,
+    app_data: Option<PathBuf>,
+) -> Option<PathBuf> {
+    documents
+        .or(home)
+        .or(app_data)
+        .map(|base| base.join(OUTPUT_FOLDER))
+}
+
 /// Cores minus one, between 1 and 4.
 fn default_workers() -> usize {
     std::thread::available_parallelism()
@@ -111,5 +127,25 @@ mod tests {
         }
         let ok = Settings::defaults(dir.path()).sanitized(&default_out);
         assert_eq!(ok.output_dir, dir.path());
+    }
+
+    #[test]
+    fn default_output_dir_falls_back_from_documents_to_home_to_app_data() {
+        let docs = Some(PathBuf::from("/docs"));
+        let home = Some(PathBuf::from("/home/u"));
+        let data = Some(PathBuf::from("/data"));
+        assert_eq!(
+            default_output_dir(docs, home.clone(), data.clone()),
+            Some(PathBuf::from("/docs/OmniMark"))
+        );
+        assert_eq!(
+            default_output_dir(None, home, data.clone()),
+            Some(PathBuf::from("/home/u/OmniMark"))
+        );
+        assert_eq!(
+            default_output_dir(None, None, data),
+            Some(PathBuf::from("/data/OmniMark"))
+        );
+        assert_eq!(default_output_dir(None, None, None), None);
     }
 }
