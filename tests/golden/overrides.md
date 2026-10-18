@@ -12,3 +12,5 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 | (satır içi testler) | `mailto:`/`tel:` bağlantıları düşer | Korunur | Kullanıcı için anlamlı bağlantılar |
 | test.pptx | `![…](Picture4.jpg)` (var olmayan dosya, hep .jpg) | `test_assets/<gerçek ad>` dosyası | Görseller erişilebilir |
 | (satır içi testler) | Grafik sonrası satır sonu yok, `10.0` | Satır sonu var, önbellek değeri (`10`) | Yapışan metin hatası; pandas/py float biçimi |
+| PDF fixture'ları | pdfminer/pdfplumber çıktısıyla birebir eşitlik | İçerik ve yapı doğrulaması; başlıklar `#` ile, madde imleri `- ` ile | pdfium farklı metin motoru; MarkItDown başlık üretmiyor |
+| PDF form sayfaları | Tablo satırı ile düz metin satırı bitişik (satır sonu ile) | Tablo öncesi ve sonrası boş satır | Bitişik düz satır, Markdown'da tablo satırı sayılmasın |

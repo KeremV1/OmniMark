@@ -16,6 +16,7 @@ chardetng.workspace = true
 encoding_rs.workspace = true
 calamine.workspace = true
 htmd.workspace = true
+pdfium-render.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

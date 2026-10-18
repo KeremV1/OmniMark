@@ -7,6 +7,7 @@ testlerinde kullanılır. MarkItDown MIT lisanslıdır; lisans metni `LICENSE-MA
 | Klasör | İçerik |
 | --- | --- |
 | `files/` | `packages/markitdown/tests/test_files/` içindeki tüm örnek dosyalar (üretici `.py` betikleri hariç) |
+| `files/expected_outputs/` | MarkItDown 0.1.8'in PDF fixture'ları için ürettiği beklenen Markdown (`packages/markitdown/tests/test_files/expected_outputs/`); golden içerik doğrulaması için |
 | `ocr/` | `packages/markitdown-ocr/tests/ocr_test_data/` içinden 100 KB altı dosyalar + `pdf_scanned_minimal.pdf` |
 | `reference/tests/` | MarkItDown testleri (`_test_vectors.py` dahil): beklenen `must_include` / `must_not_include` dizeleri |
 | `reference/ocr-tests/` | OCR eklentisinin testleri |
