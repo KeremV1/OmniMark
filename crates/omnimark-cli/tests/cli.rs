@@ -29,3 +29,32 @@ fn help_lists_the_convert_command() {
         .unwrap();
     assert!(String::from_utf8_lossy(&output.stdout).contains("convert"));
 }
+
+#[test]
+fn converts_a_text_file_and_never_overwrites() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("notes.txt");
+    std::fs::write(
+        &input, "merhaba
+",
+    )
+    .unwrap();
+    let out = dir.path().join("out");
+    for _ in 0..2 {
+        let status = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+            .args(["convert", "-o"])
+            .arg(&out)
+            .arg(&input)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+    assert_eq!(
+        std::fs::read_to_string(out.join("notes.md")).unwrap(),
+        "merhaba"
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("notes (2).md")).unwrap(),
+        "merhaba"
+    );
+}
