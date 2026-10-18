@@ -54,6 +54,13 @@ function patch(state: QueueState, path: string, change: Partial<QueueItem>): Que
   return mapItems(state, (i) => (i.path === path ? { ...i, ...change } : i));
 }
 
+const TERMINAL: ReadonlySet<Status> = new Set<Status>(['done', 'failed', 'cancelled', 'unsupported']);
+
+/** Like `patch`, but leaves items that already reached a terminal status alone (late events). */
+function patchActive(state: QueueState, path: string, change: Partial<QueueItem>): QueueState {
+  return mapItems(state, (i) => (i.path === path && !TERMINAL.has(i.status) ? { ...i, ...change } : i));
+}
+
 /** Converting items stay; everything else listed in `paths` is dropped. */
 export function removePaths(state: QueueState, paths: string[]): QueueState {
   const drop = new Set(paths);
@@ -86,14 +93,37 @@ export function beginBatch(state: QueueState, paths: string[]): QueueState {
   return { ...next, running: true };
 }
 
+/** Marks the run as over; used when `convert()` settles, whether or not `finished` arrived. */
+export function endBatch(state: QueueState): QueueState {
+  return { ...state, running: false };
+}
+
+/** `convert()` rejected: stop the run and fail every item that was still mid-conversion. */
+export function failBatch(state: QueueState, error: AppError): QueueState {
+  return endBatch(mapItems(state, (i) => (i.status === 'converting' ? { ...i, status: 'failed', error } : i)));
+}
+
+/** Selected items that may leave the list now (converting ones stay). */
+export function removablePaths(state: QueueState): string[] {
+  return state.items.filter((i) => i.selected && i.status !== 'converting').map((i) => i.path);
+}
+
+/** Header checkbox state over the selectable (supported) items. */
+export function selectionState(state: QueueState): 'all' | 'some' | 'none' {
+  const selectable = state.items.filter((i) => i.status !== 'unsupported');
+  const selected = selectable.filter((i) => i.selected).length;
+  if (selected === 0) return 'none';
+  return selected === selectable.length ? 'all' : 'some';
+}
+
 export function applyEvent(state: QueueState, event: ConvertEvent): QueueState {
   switch (event.event) {
     case 'started':
       return state;
     case 'fileStarted':
-      return patch(state, event.data.path, { status: 'converting', progress: 0 });
+      return patchActive(state, event.data.path, { status: 'converting', progress: 0 });
     case 'progress':
-      return patch(state, event.data.path, { status: 'converting', progress: event.data.fraction });
+      return patchActive(state, event.data.path, { status: 'converting', progress: event.data.fraction });
     case 'fileFinished':
       return patch(state, event.data.path, {
         status: 'done',
