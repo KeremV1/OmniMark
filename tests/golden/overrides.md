@@ -10,3 +10,5 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 | test.xlsx, test.xls | Boş hücre `NaN`, `Unnamed: N`, `100.0` | Boş hücre boş, tam sayılar `.0`'sız | pandas artefaktları |
 | test_wikipedia.html | Yalnız `#mw-content-text` (URL'ye bağlı WikipediaConverter) | Tüm gövde; kenar çubuğu dizeleri kontrol edilmez | Site-özel dönüştürücüler M1 kapsamı dışında |
 | (satır içi testler) | `mailto:`/`tel:` bağlantıları düşer | Korunur | Kullanıcı için anlamlı bağlantılar |
+| test.pptx | `![…](Picture4.jpg)` (var olmayan dosya, hep .jpg) | `test_assets/<gerçek ad>` dosyası | Görseller erişilebilir |
+| (satır içi testler) | Grafik sonrası satır sonu yok, `10.0` | Satır sonu var, önbellek değeri (`10`) | Yapışan metin hatası; pandas/py float biçimi |
