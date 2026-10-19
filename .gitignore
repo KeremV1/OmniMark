@@ -16,3 +16,16 @@ Thumbs.db
 # Agent workspaces
 .worktrees/
 .superpowers/
+
+# Downloaded native libraries
+vendor/
+
+# Frontend scaffold
+dist-ssr
+*.local
+.vscode/*
+!.vscode/extensions.json
+
+# Tauri build output
+src-tauri/gen/
+shots/

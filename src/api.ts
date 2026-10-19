@@ -1,0 +1,127 @@
+import { Channel, invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
+
+/** Mirrors `omnimark_core::detect::FileKind` (serialized camelCase). */
+export type FileKind =
+  | 'pdf'
+  | 'word'
+  | 'excel'
+  | 'powerPoint'
+  | 'html'
+  | 'csv'
+  | 'text'
+  | 'json'
+  | 'image'
+  | 'audio'
+  | 'unknown';
+
+/** Error kinds from the core (`ErrorKind`) plus the app-level ones (`AppError`). */
+export type ErrorKind =
+  | 'unsupported'
+  | 'corrupt'
+  | 'encrypted'
+  | 'tooLarge'
+  | 'cancelled'
+  | 'io'
+  | 'missingComponent'
+  | 'busy'
+  | 'invalidPath';
+
+export interface AppError {
+  kind: ErrorKind;
+  message: string;
+}
+
+export interface FileEntry {
+  path: string;
+  name: string;
+  kind: FileKind;
+  size: number;
+  supported: boolean;
+}
+
+export type SettingsLanguage = 'auto' | 'tr' | 'en';
+
+export interface Settings {
+  outputDir: string;
+  extractImages: boolean;
+  workers: number;
+  language: SettingsLanguage;
+}
+
+export interface OutputText {
+  text: string;
+  truncated: boolean;
+}
+
+export type ConvertEvent =
+  | { event: 'started'; data: { total: number } }
+  | { event: 'fileStarted'; data: { path: string } }
+  | { event: 'progress'; data: { path: string; fraction: number } }
+  | { event: 'fileFinished'; data: { path: string; output: string; warnings: string[] } }
+  | { event: 'fileFailed'; data: { path: string; kind: ErrorKind; message: string } }
+  | { event: 'fileCancelled'; data: { path: string } }
+  | { event: 'finished'; data: { ok: number; failed: number; cancelled: number } };
+
+/** Extensions the M1 converters accept. */
+export const SUPPORTED_EXTENSIONS = [
+  'pdf', 'docx', 'xlsx', 'xlsm', 'xls', 'ods', 'pptx', 'html', 'htm', 'csv', 'txt', 'md', 'markdown', 'json', 'jsonl',
+];
+
+export function inspectFiles(paths: string[]): Promise<{ entries: FileEntry[]; truncated: boolean }> {
+  return invoke('inspect_files', { paths });
+}
+
+/** Resolves when the batch ends; rejects with an `AppError` (for example `busy`). */
+export function convert(files: string[], onEvent: (e: ConvertEvent) => void): Promise<void> {
+  const channel = new Channel<ConvertEvent>();
+  channel.onmessage = onEvent;
+  return invoke('convert', { files, onEvent: channel });
+}
+
+export function cancel(): Promise<void> {
+  return invoke('cancel');
+}
+
+export function readOutput(path: string): Promise<OutputText> {
+  return invoke('read_output', { path });
+}
+
+export function openOutputDir(): Promise<void> {
+  return invoke('open_output_dir');
+}
+
+export function reveal(path: string): Promise<void> {
+  return invoke('reveal', { path });
+}
+
+export function openLogDir(): Promise<void> {
+  return invoke('open_log_dir');
+}
+
+export function getSettings(): Promise<Settings> {
+  return invoke('get_settings');
+}
+
+/** Returns the sanitized settings the backend actually stored. */
+export function setSettings(settings: Settings): Promise<Settings> {
+  return invoke('set_settings', { settings });
+}
+
+/** `allFilesLabel` is the localized name of the catch-all filter, for example `t('dialog.allFiles')`. */
+export async function pickFiles(allFilesLabel: string): Promise<string[]> {
+  const picked = await open({
+    multiple: true,
+    directory: false,
+    filters: [
+      { name: 'OmniMark', extensions: SUPPORTED_EXTENSIONS },
+      { name: allFilesLabel, extensions: ['*'] },
+    ],
+  });
+  return picked ?? [];
+}
+
+export async function pickFolder(): Promise<string | null> {
+  const picked = await open({ multiple: false, directory: true });
+  return picked ?? null;
+}
