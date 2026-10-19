@@ -74,6 +74,8 @@ pub fn run() {
             commands::read_output,
             commands::open_output_dir,
             commands::reveal,
+            commands::open_output,
+            commands::trim_memory,
             commands::open_log_dir,
             commands::get_settings,
             commands::set_settings

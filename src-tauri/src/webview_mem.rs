@@ -116,6 +116,23 @@ pub fn apply<R: tauri::Runtime>(
     }
 }
 
+/// Re-applies the memory level to the main window (a no-op off Windows). Used after the
+/// preview closes: setting the level again makes WebView2 trim what the renderer freed.
+pub fn trim(app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    {
+        use tauri::Manager;
+        match app.get_webview_window("main") {
+            Some(window) => apply(&window, memory_level(true, false), |outcome| {
+                log::debug!("WebView2 memory trim: {outcome:?}");
+            }),
+            None => log::debug!("WebView2 memory trim: no main window"),
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 /// Builds the main window (config-declared, `create: false`) and wires the memory policy.
 pub fn build_main_window(app: &tauri::App) -> tauri::Result<()> {
     let config = app
