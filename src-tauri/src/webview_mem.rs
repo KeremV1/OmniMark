@@ -34,6 +34,31 @@ pub fn needs_update(last: Option<MemoryLevel>, next: MemoryLevel) -> bool {
     last != Some(next)
 }
 
+/// Result of one attempt to push a level to WebView2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub enum ApplyOutcome {
+    Applied,
+    /// The runtime lacks `ICoreWebView2_19` (permanent): retrying is pointless.
+    Unsupported,
+    /// Transient failure (e.g. CoreWebView2 not ready yet): must be retried on the next event.
+    Failed,
+}
+
+/// The last-applied level after an attempt: recorded for `Applied` and `Unsupported`,
+/// unchanged for `Failed` so the next event retries.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn record_outcome(
+    last: Option<MemoryLevel>,
+    wanted: MemoryLevel,
+    outcome: ApplyOutcome,
+) -> Option<MemoryLevel> {
+    match outcome {
+        ApplyOutcome::Applied | ApplyOutcome::Unsupported => Some(wanted),
+        ApplyOutcome::Failed => last,
+    }
+}
+
 /// Memory policy. Currently Low always (measured config: 79.9 MB -> 61.1 MB idle).
 /// To use Normal while the window is focused, return `Normal` when `focused && !minimized`.
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -41,8 +66,14 @@ pub fn memory_level(_focused: bool, _minimized: bool) -> MemoryLevel {
     MemoryLevel::Low
 }
 
+/// Pushes `wanted` to WebView2. `with_webview` runs the closure later on the UI thread, so the
+/// outcome is reported through `on_done` (not called if the closure could not be queued).
 #[cfg(windows)]
-pub fn apply<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, wanted: MemoryLevel) {
+pub fn apply<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    wanted: MemoryLevel,
+    on_done: impl FnOnce(ApplyOutcome) + Send + 'static,
+) {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
         ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL,
         COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
@@ -55,25 +86,30 @@ pub fn apply<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, wanted: Memory
     };
     let result = window.with_webview(move |webview| {
         // SAFETY: COM calls on the WebView2 controller, made on the UI thread by `with_webview`.
-        unsafe {
-            let core = match webview.controller().CoreWebView2() {
-                Ok(core) => core,
+        let outcome = unsafe {
+            match webview.controller().CoreWebView2() {
                 Err(e) => {
                     log::warn!("WebView2 memory level: no CoreWebView2: {e}");
-                    return;
+                    ApplyOutcome::Failed
                 }
-            };
-            match core.cast::<ICoreWebView2_19>() {
-                Ok(core19) => {
-                    if let Err(e) = core19.SetMemoryUsageTargetLevel(level) {
-                        log::warn!("WebView2 memory level could not be set: {e}");
+                Ok(core) => match core.cast::<ICoreWebView2_19>() {
+                    Ok(core19) => match core19.SetMemoryUsageTargetLevel(level) {
+                        Ok(()) => ApplyOutcome::Applied,
+                        Err(e) => {
+                            log::warn!("WebView2 memory level could not be set: {e}");
+                            ApplyOutcome::Failed
+                        }
+                    },
+                    Err(_) => {
+                        log::info!(
+                            "WebView2 runtime lacks ICoreWebView2_19; memory level unchanged"
+                        );
+                        ApplyOutcome::Unsupported
                     }
-                }
-                Err(_) => {
-                    log::info!("WebView2 runtime lacks ICoreWebView2_19; memory level unchanged")
-                }
+                },
             }
-        }
+        };
+        on_done(outcome);
     });
     if let Err(e) = result {
         log::warn!("WebView2 memory level: with_webview failed: {e}");
@@ -99,7 +135,7 @@ pub fn build_main_window(app: &tauri::App) -> tauri::Result<()> {
     let window = builder.build()?;
     #[cfg(windows)]
     {
-        let last = std::sync::Mutex::new(None::<MemoryLevel>);
+        let last = std::sync::Arc::new(std::sync::Mutex::new(None::<MemoryLevel>));
         let watched = window.clone();
         let refresh = move |focused: bool| {
             let minimized = watched.is_minimized().unwrap_or_else(|e| {
@@ -107,10 +143,14 @@ pub fn build_main_window(app: &tauri::App) -> tauri::Result<()> {
                 false
             });
             let next = memory_level(focused, minimized);
-            let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
-            if needs_update(*last, next) {
-                *last = Some(next);
-                apply(&watched, next);
+            // Decide under the lock, but never hold it across `apply`.
+            let current = *last.lock().unwrap_or_else(|e| e.into_inner());
+            if needs_update(current, next) {
+                let last = std::sync::Arc::clone(&last);
+                apply(&watched, next, move |outcome| {
+                    let mut guard = last.lock().unwrap_or_else(|e| e.into_inner());
+                    *guard = record_outcome(*guard, next, outcome);
+                });
             }
         };
         refresh(true);
@@ -161,6 +201,33 @@ mod tests {
         ));
         assert!(needs_update(Some(MemoryLevel::Low), MemoryLevel::Normal));
         assert!(needs_update(Some(MemoryLevel::Normal), MemoryLevel::Low));
+    }
+
+    #[test]
+    fn record_outcome_keeps_last_only_on_failure() {
+        use ApplyOutcome::*;
+        assert_eq!(
+            record_outcome(None, MemoryLevel::Low, Applied),
+            Some(MemoryLevel::Low)
+        );
+        assert_eq!(
+            record_outcome(None, MemoryLevel::Low, Unsupported),
+            Some(MemoryLevel::Low)
+        );
+        assert_eq!(record_outcome(None, MemoryLevel::Low, Failed), None);
+        assert_eq!(
+            record_outcome(Some(MemoryLevel::Normal), MemoryLevel::Low, Failed),
+            Some(MemoryLevel::Normal)
+        );
+        // A failed first attempt is retried, an unsupported one is not.
+        assert!(needs_update(
+            record_outcome(None, MemoryLevel::Low, Failed),
+            MemoryLevel::Low
+        ));
+        assert!(!needs_update(
+            record_outcome(None, MemoryLevel::Low, Unsupported),
+            MemoryLevel::Low
+        ));
     }
 
     #[test]
