@@ -77,6 +77,7 @@ const tr = {
   'filter.label': 'Listeyi süz',
   'status.percent': '%{n}',
   'status.warnings': '{n} uyarı',
+  'status.warning1': '1 uyarı',
   'preview.label': 'Önizleme',
   'preview.empty': 'Bu dosyadan boş bir Markdown çıktı.',
   'details.file': 'Dosya',
@@ -179,6 +180,7 @@ const en: Record<MessageKey, string> = {
   'filter.label': 'Filter the list',
   'status.percent': '{n}%',
   'status.warnings': '{n} warnings',
+  'status.warning1': '1 warning',
   'preview.label': 'Preview',
   'preview.empty': 'This file produced an empty Markdown file.',
   'details.file': 'File',
@@ -225,4 +227,9 @@ export function t(key: MessageKey, vars?: Record<string, string | number>): stri
   const text = messages[current][key];
   if (!vars) return text;
   return text.replace(/\{(\w+)\}/g, (m, name: string) => (name in vars ? String(vars[name]) : m));
+}
+
+/** "1 warning" for one, "{n} warnings" otherwise. */
+export function warningsLabel(n: number): string {
+  return n === 1 ? t('status.warning1') : t('status.warnings', { n });
 }

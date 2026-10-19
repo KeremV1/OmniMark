@@ -1,4 +1,4 @@
-import { getLang, type MessageKey, t } from '../i18n';
+import { getLang, type MessageKey, t, warningsLabel } from '../i18n';
 import { formatBytes } from '../platform';
 import { type QueueItem, selectionState, visibleItems } from '../queue';
 import type { Actions, View } from './context';
@@ -202,7 +202,7 @@ export function createList(actions: Actions): List {
       case 'done':
         row.status.replaceChildren(h('span', { class: 'state state-done' }, svg(icons.check, 'state-icon'), t('status.done')));
         if (item.warnings.length > 0) {
-          row.status.append(h('span', { class: 'warn-count' }, t('status.warnings', { n: item.warnings.length })));
+          row.status.append(h('span', { class: 'warn-count' }, warningsLabel(item.warnings.length)));
         }
         break;
       case 'failed': {
