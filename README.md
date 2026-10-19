@@ -25,53 +25,32 @@
 
 ## Kaldığımız yer
 
-![OmniMark: dosya kuyruğu ve önizleme](docs/media/preview-dark.png)
-
 **Geldiğimiz nokta (2026-10-19):** M1 bitti; ardından büyük belge önizlemesi hafifletildi.
 - **Dönüştürücüler:** PDF (pdfium; tablo ve form tespiti), Word (başlık, liste, tablo, görsel, dipnot, formül → LaTeX), Excel (XLSX/XLSM/XLS/ODS), PowerPoint (slayt, tablo, grafik, not), HTML, CSV (`;`/sekme tespiti), TXT/MD/JSON.
 - **Masaüstü uygulaması (Tauri 2):** dosya kuyruğu, sürükle-bırak, ilerleme, filtreler, Markdown önizleme (Görünüm/Kaynak), ayarlar, kısayollar, açık/koyu tema, Türkçe/İngilizce.
 - **Komut satırı:** `omnimark convert dosya.pdf -o çıktı`.
 - **Güvenlik:** kötü niyetli dosyalara karşı bellek/boyut sınırları, harici bağlantılar asla açılmaz, çökmeler dosya bazında yalıtılır, arayüz yalnızca çıktı klasöründeki `.md` dosyalarını okuyabilir.
 - **Önizleme:** belgenin ilk ~64 KB'ı çizilir; üstte belgenin **tamamının başlık listesi** görünür; kesildiyse "ilk 64 KB gösteriliyor" şeridi ve **Varsayılan uygulamada aç** düğmesi çıkar. Büyük belgede önizleme belleği +294 MB'tan **+24 MB**'a indi (hedef +50 MB ✅); kapatınca ~21 MB WebView2'de kalıyor (önizleme boyutundan bağımsız).
-- **Testler:** 160 Rust + 26 arayüz testi geçiyor; CI her push'ta Windows, macOS ve Linux'ta yeşil.
+- **Testler:** 160 Rust + 27 arayüz testi geçiyor; CI her push'ta Windows, macOS ve Linux'ta yeşil.
 - **Ölçümler (Windows, kurulu sürüm):** kurulum dosyası **5,4 MB** · pencere açılışı **59 ms** · boşta bellek **71 MB** (Görev Yöneticisi "Bellek" toplamı, WebView2 dahil; hedef < 100 MB ✅). Ayrıntı: [docs/m1-olcumler.md](docs/m1-olcumler.md).
 
-**Sıradaki iş:**
-1. **Elle yapılacak testler** (aşağıda) ve sonuçlarına göre düzeltmeler.
-2. **M2 (sürüyor):** görsel dosyaları (EXIF/XMP metadata) ve isteğe bağlı OCR — [M2 tasarımı](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md).
+**Sıradaki iş (sonraki oturum):**
+1. **M2'yi uygulamak:** görsel dosyaları (EXIF/XMP metadata) ve isteğe bağlı OCR. Tasarım ve görev planı hazır: [M2 tasarımı](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md) · [M2 planı](docs/superpowers/plans/2026-10-19-omnimark-m2/00-genel.md). Başlangıç: Görev M2-0.
+2. **Kalan elle testler:** İptal ve 64 KB önizleme (aşağıda).
 3. **M3:** ses transkripsiyonu (yerel Whisper, isteğe bağlı modül).
 
-**Elle yapılacak testler** (aşağıda) ve sonuçlarına göre düzeltmeler.
-3. **M3:** ses transkripsiyonu (yerel Whisper, isteğe bağlı modül).
-
-**Elle yapılacak testler** (otomatikleştirilemeyenler):
-- [ ] Explorer'dan dosya ve klasör sürükle-bırak (klasörde desteklenmeyen dosyalar bilerek atlanır).
-- [ ] **Dosya ekle** ve **Değiştir** (klasör seçme) pencereleri.
-- [ ] Dönüştürme sırasında **İptal**.
-- [ ] Önizlemede **Kopyala**: WebView2 pano izni soruyor mu?
-- [ ] Ayarlarda dil değişimi, paralel işçi sayısı, görselleri çıkar seçeneği.
-- [ ] Büyük bir PDF/Word ile dönüştürme ve önizleme: başlık listesi, "ilk 64 KB" şeridi, **Varsayılan uygulamada aç**; Görev Yöneticisi'nde bellek.
+**Elle testler** (2026-10-19, kullanıcı):
+- [x] Explorer'dan dosya ve klasör sürükle-bırak (klasörde desteklenmeyen dosyalar bilerek atlanır).
+- [x] **Dosya ekle** ve **Değiştir** (klasör seçme) pencereleri.
+- [x] Ayarlarda dil değişimi, paralel işçi sayısı, görselleri çıkar seçeneği.
+- [x] Büyük bir PDF/Word ile dönüştürme ve önizleme: başlık listesi, kesme şeridi, **Varsayılan uygulamada aç** (256 KB sürümüyle).
+- [x] Önizlemede **Kopyala**: WebView2 pano izni sormuyor.
+- [ ] **İptal**: dönüşüm çok hızlı bittiği için denenemedi → 50+ dosya ya da birkaç büyük PDF ile dönüştürmeyi başlatıp hemen İptal'e bas.
+- [ ] **64 KB önizleme**: büyük bir belgede "ilk 64 KB gösteriliyor" şeridi, başlık listesi; Görev Yöneticisi'nde bellek.
 
 Kontrol edilecek diğer konular: oturum boyunca senin adına verilen kararlar [HANDOFF.md](HANDOFF.md) dosyasında listeli.
 
 Ayrıntı: [HANDOFF.md](HANDOFF.md) · [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md) · [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md) · [ölçümler](docs/m1-olcumler.md)
-
-## Ekranlar
-
-<table>
-  <tr>
-    <td align="center"><img src="docs/media/queue-light.png" width="480" alt="Kuyruk"><br><sub><b>Kuyruk</b><br>Eklenen dosyalar, tür ve boyut; desteklenmeyenler soluk görünür (açık tema)</sub></td>
-    <td align="center"><img src="docs/media/converting-dark.png" width="480" alt="Dönüştürme sürüyor"><br><sub><b>Dönüştürme sürüyor</b><br>Dosya başına ilerleme, uyarılar, hata ve İptal (koyu tema)</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/media/preview-dark.png" width="480" alt="Önizleme ve başlık listesi"><br><sub><b>Önizleme + başlık listesi</b><br>Büyük belgede ilk 64 KB çizilir; belgenin tamamının başlıkları üstte listelenir (koyu tema)</sub></td>
-    <td align="center"><img src="docs/media/drag-dark.png" width="480" alt="Sürükle-bırak"><br><sub><b>Sürükle-bırak</b><br>Dosyaları ya da klasörü pencereye bırakın (koyu tema); <a href="docs/media/empty-light.png">boş ekran</a></sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/media/settings-light.png" width="480" alt="Ayarlar"><br><sub><b>Ayarlar</b><br>Çıktı klasörü, görseller, paralel işçi sayısı, dil ve Hakkında</sub></td>
-    <td align="center"><img src="docs/media/converting-en-light.png" width="480" alt="English interface"><br><sub><b>İngilizce arayüz</b><br>Türkçe ve İngilizce, sistem diline göre ya da ayarlardan (açık tema)</sub></td>
-  </tr>
-</table>
 
 ## Desteklenen formatlar
 
