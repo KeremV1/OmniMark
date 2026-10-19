@@ -80,6 +80,7 @@ export type ConvertEvent =
 /** Extensions the M1 converters accept. */
 export const SUPPORTED_EXTENSIONS = [
   'pdf', 'docx', 'xlsx', 'xlsm', 'xls', 'ods', 'pptx', 'html', 'htm', 'csv', 'txt', 'md', 'markdown', 'json', 'jsonl',
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff',
 ];
 
 export function inspectFiles(paths: string[]): Promise<{ entries: FileEntry[]; truncated: boolean }> {

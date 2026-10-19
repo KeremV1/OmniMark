@@ -18,7 +18,7 @@ const SAMPLES: FileEntry[] = [
   { path: `${DIR}\\Yıllık rapor 2026.pdf`, name: 'Yıllık rapor 2026.pdf', kind: 'pdf', size: 2_516_582, supported: true },
   { path: `${DIR}\\Ürün yol haritası sunumu.pptx`, name: 'Ürün yol haritası sunumu.pptx', kind: 'powerPoint', size: 8_493_465, supported: true },
   { path: `${DIR}\\Bütçe 2027.xlsx`, name: 'Bütçe 2027.xlsx', kind: 'excel', size: 184_320, supported: true },
-  { path: `${DIR}\\ofis-fotoğrafı.jpg`, name: 'ofis-fotoğrafı.jpg', kind: 'image', size: 1_258_291, supported: false },
+  { path: `${DIR}\\ofis-fotoğrafı.jpg`, name: 'ofis-fotoğrafı.jpg', kind: 'image', size: 1_258_291, supported: true },
   { path: `${DIR}\\Sözleşme taslağı.docx`, name: 'Sözleşme taslağı.docx', kind: 'word', size: 56_320, supported: true },
 ];
 
