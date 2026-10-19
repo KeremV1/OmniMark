@@ -137,7 +137,7 @@ export function installDevMock(): void {
             text: SAMPLE_MARKDOWN,
             truncated: true,
             totalBytes: 5_033_165,
-            shownBytes: 261_900,
+            shownBytes: 65_300,
             headings: [
               { level: 1, text: 'Yıllık rapor 2026', inPreview: true },
               { level: 2, text: 'Öne çıkanlar', inPreview: true },
