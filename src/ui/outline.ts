@@ -23,18 +23,22 @@ export function normalizeHeading(text: string): string {
  * the outline does not know about (setext headings) are skipped.
  */
 export function matchHeadings(outline: HeadingRef[], rendered: HeadingRef[]): (number | null)[] {
-  const renderedKeys = rendered.map((r) => normalizeHeading(r.text));
+  const keys = rendered.map((r) => normalizeHeading(r.text));
   let next = 0;
   return outline.map((item) => {
     const key = normalizeHeading(item.text);
-    for (let k = next; k < rendered.length; k++) {
-      const other = renderedKeys[k];
-      if (rendered[k].level === item.level && (key.startsWith(other) || other.startsWith(key))) {
-        next = k + 1;
-        return k;
-      }
+    if (key === '') return null;
+    // The nearest exact match wins; a prefix match (link targets, trailing marks) is the fallback.
+    let found: number | null = null;
+    for (let k = next; k < rendered.length && found === null; k++) {
+      if (rendered[k].level === item.level && keys[k] === key) found = k;
     }
-    return null;
+    for (let k = next; k < rendered.length && found === null; k++) {
+      const other = keys[k];
+      if (rendered[k].level === item.level && other !== '' && (key.startsWith(other) || other.startsWith(key))) found = k;
+    }
+    if (found !== null) next = found + 1;
+    return found;
   });
 }
 
@@ -58,6 +62,8 @@ export function createOutline(): Outline {
   const list = h('ul', { class: 'outline-list', id: listId });
   const el = h('nav', { class: 'outline', 'aria-label': t('preview.outline'), hidden: true }, toggle, list);
   let open = false;
+  // The default open state applies once per document; tab switches keep what the user chose.
+  let fresh = true;
 
   function setOpen(next: boolean): void {
     open = next;
@@ -79,7 +85,7 @@ export function createOutline(): Outline {
         const label = h('span', {}, item.text);
         const entry = item.inPreview
           ? h('button', { class: 'outline-link', type: 'button', onclick: () => jump(index) }, label)
-          : h('span', { class: 'outline-dim', title: t('preview.outlineBeyond') }, label);
+          : h('span', { class: 'outline-dim', 'aria-disabled': 'true', title: t('preview.outlineBeyond') }, label);
         const li = h('li', { class: 'outline-item' }, entry);
         li.style.paddingLeft = `${(item.level - base) * 14}px`;
         return li;
@@ -87,12 +93,14 @@ export function createOutline(): Outline {
       if (more) items.push(h('li', { class: 'outline-more' }, t('preview.outlineMore')));
       list.replaceChildren(...items);
       el.hidden = false;
-      setOpen(headings.length <= OUTLINE_OPEN_MAX);
+      if (fresh) setOpen(headings.length <= OUTLINE_OPEN_MAX);
+      fresh = false;
     },
     setActive(active) {
       for (const b of Array.from(list.querySelectorAll<HTMLButtonElement>('.outline-link'))) b.disabled = !active;
     },
     clear() {
+      fresh = true;
       list.replaceChildren();
       el.hidden = true;
     },

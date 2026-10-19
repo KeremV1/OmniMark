@@ -1,6 +1,6 @@
 //! Tauri commands: the only surface the frontend can call.
 
-use std::io::Read;
+use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
 use omnimark_core::{CancelToken, ConvertOptions};
@@ -110,35 +110,40 @@ pub struct OutputText {
     pub text: String,
     pub truncated: bool,
     pub total_bytes: u64,
+    /// Exact length in bytes of the returned text.
+    pub shown_bytes: u64,
     pub headings: Vec<Heading>,
     pub headings_truncated: bool,
 }
 
-/// Where to cut a window that is known to be cut short (the file continues past it): back to a
-/// UTF-8 boundary, then to the last blank line, else the last newline, else the boundary itself.
-/// `bytes` must hold at least one byte past `limit` so the boundary test can look at it.
+/// Longest line the outline scan keeps in memory; longer lines are skipped (never a heading).
+const MAX_LINE: usize = 64 * 1024;
+
+/// Where to cut a window that is known to be cut short (the file continues past it). The cut
+/// lands on a UTF-8 boundary, then on the last blank line (`\n\n` or `\r\n\r\n`) when that
+/// keeps at least half of the window, else on the last line break (before its `\r`), else on
+/// the boundary itself. `bytes` should hold at least one byte past `limit`.
 fn preview_cut(bytes: &[u8], limit: usize) -> usize {
-    let limit = limit.min(bytes.len());
-    let mut end = limit;
+    let mut end = limit.min(bytes.len());
     // A UTF-8 continuation byte (10xxxxxx) at `end` means `end` is inside a character.
     while end > 0 && end < bytes.len() && bytes[end] & 0xC0 == 0x80 {
         end -= 1;
     }
     let window = &bytes[..end];
-    if let Some(i) = rfind(
-        window, b"
-
-",
-    ) {
+    let blank = rfind(window, b"\n\n").max(rfind(window, b"\r\n\r\n"));
+    if let Some(i) = blank.filter(|&i| i > 0 && i >= end / 2) {
         return i;
     }
-    if let Some(i) = rfind(
-        window, b"
-",
-    ) {
-        return i;
+    match rfind(window, b"\n") {
+        Some(i) if i > 0 => {
+            if window[i - 1] == b'\r' {
+                i - 1
+            } else {
+                i
+            }
+        }
+        _ => end,
     }
-    end
 }
 
 fn rfind(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -187,9 +192,32 @@ fn fence_of(line: &str) -> Option<(u8, usize, &str)> {
     (run >= 3).then(|| (ch, run, &rest[run..]))
 }
 
+/// Skips input up to and including the next `\n`; returns the bytes skipped.
+fn skip_line(reader: &mut impl std::io::BufRead) -> std::io::Result<u64> {
+    let mut skipped = 0u64;
+    loop {
+        let chunk = reader.fill_buf()?;
+        if chunk.is_empty() {
+            return Ok(skipped);
+        }
+        match chunk.iter().position(|&b| b == b'\n') {
+            Some(i) => {
+                reader.consume(i + 1);
+                return Ok(skipped + i as u64 + 1);
+            }
+            None => {
+                let n = chunk.len();
+                reader.consume(n);
+                skipped += n as u64;
+            }
+        }
+    }
+}
+
 /// Scans a whole document line by line and collects ATX headings outside fenced code blocks.
-/// A heading is `in_preview` when its line ends at or before byte `preview_end`. Stops after
-/// `max` headings and reports whether more existed.
+/// A heading is `in_preview` when its text ends at or before byte `preview_end`. Stops after
+/// `max` headings and reports whether more existed. Memory is bounded: lines longer than
+/// `MAX_LINE` are skipped without being stored and count as plain text.
 fn extract_headings(
     mut reader: impl std::io::BufRead,
     preview_end: u64,
@@ -201,15 +229,29 @@ fn extract_headings(
     let mut offset = 0u64;
     loop {
         buf.clear();
-        let read = reader.read_until(b'\n', &mut buf)?;
+        let read = (&mut reader)
+            .take(MAX_LINE as u64)
+            .read_until(b'\n', &mut buf)?;
         if read == 0 {
             return Ok((headings, false));
         }
-        let end = offset + read as u64;
-        offset = end;
-        let line = String::from_utf8_lossy(&buf);
-        let line = line.trim_end_matches(['\n', '\r']);
-        if let Some((ch, run, tail)) = fence_of(line) {
+        let start = offset;
+        offset += read as u64;
+        if buf.last() != Some(&b'\n') && read == MAX_LINE {
+            offset += skip_line(&mut reader)?;
+            continue;
+        }
+        // Raw terminator: `\n`, then `\r`.
+        let mut body: &[u8] = &buf;
+        if let Some(rest) = body.strip_suffix(b"\n") {
+            body = rest;
+        }
+        if let Some(rest) = body.strip_suffix(b"\r") {
+            body = rest;
+        }
+        let text_end = start + body.len() as u64;
+        let line = String::from_utf8_lossy(body);
+        if let Some((ch, run, tail)) = fence_of(&line) {
             match fence {
                 None if ch != b'`' || !tail.contains('`') => fence = Some((ch, run)),
                 Some((open_ch, open_run))
@@ -224,16 +266,14 @@ fn extract_headings(
         if fence.is_some() {
             continue;
         }
-        if let Some((level, text)) = parse_atx(line) {
+        if let Some((level, text)) = parse_atx(&line) {
             if headings.len() == max {
                 return Ok((headings, true));
             }
-            // The line ends before its newline; `end` includes it, so compare the text end.
-            let line_end = end - (read - line.len()) as u64;
             headings.push(Heading {
                 level,
                 text,
-                in_preview: line_end <= preview_end,
+                in_preview: text_end <= preview_end,
             });
         }
     }
@@ -261,15 +301,25 @@ fn read_limited(path: &Path, limit: usize) -> std::io::Result<OutputText> {
         text,
         truncated,
         total_bytes,
+        shown_bytes: cut as u64,
         headings,
         headings_truncated,
     })
 }
 
+/// Runs on the blocking pool: the outline scan reads the whole file.
 #[tauri::command]
-pub fn read_output(state: State<'_, AppState>, path: PathBuf) -> Result<OutputText, AppError> {
-    let file = resolve_output_path(&current_settings(&state).output_dir, &path)?;
-    Ok(read_limited(&file, PREVIEW_LIMIT)?)
+pub async fn read_output(
+    state: State<'_, AppState>,
+    path: PathBuf,
+) -> Result<OutputText, AppError> {
+    let root = current_settings(&state).output_dir;
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = resolve_output_path(&root, &path)?;
+        Ok(read_limited(&file, PREVIEW_LIMIT)?)
+    })
+    .await
+    .map_err(|e| AppError::Tauri(e.to_string()))?
 }
 
 /// Canonicalizes `path` and accepts it only if it is an existing `.md` file inside `root`.
@@ -398,8 +448,12 @@ mod tests {
         assert!(resolve_output_path(&root, &link).is_err());
     }
 
+    fn headings_of_bytes(bytes: &[u8], preview_end: u64, max: usize) -> (Vec<Heading>, bool) {
+        extract_headings(std::io::Cursor::new(bytes), preview_end, max).unwrap()
+    }
+
     fn headings_of(text: &str, preview_end: u64, max: usize) -> (Vec<Heading>, bool) {
-        extract_headings(std::io::Cursor::new(text.as_bytes()), preview_end, max).unwrap()
+        headings_of_bytes(text.as_bytes(), preview_end, max)
     }
 
     fn pairs(headings: &[Heading]) -> Vec<(u8, &str)> {
@@ -411,23 +465,11 @@ mod tests {
 
     #[test]
     fn preview_cut_prefers_blank_line_then_newline_then_utf8_boundary() {
-        let text = b"para one
-
-para two
-still two
-
-para three is long";
+        let text = b"para one\n\npara two\nstill two\n\npara three is long";
         // window ends inside "para three": cut at the last blank line before it
         assert_eq!(preview_cut(text, 35), 28);
         // no blank line in the window: last newline
-        assert_eq!(
-            preview_cut(
-                b"line one
-line two continues",
-                15
-            ),
-            8
-        );
+        assert_eq!(preview_cut(b"line one\nline two continues", 15), 8);
         // no newline at all: plain UTF-8 boundary ("aéé" = a, C3 A9, C3 A9)
         assert_eq!(preview_cut("aéé".as_bytes(), 2), 1);
         assert_eq!(preview_cut("aéé".as_bytes(), 3), 3);
@@ -436,21 +478,20 @@ line two continues",
     }
 
     #[test]
+    fn preview_cut_handles_crlf_and_keeps_most_of_the_window() {
+        // CRLF blank line counts as a blank line; the cut lands before it
+        let crlf = b"one\r\n\r\ntwo\r\n\r\nthree is long";
+        assert_eq!(preview_cut(crlf, 20), 10);
+        // a plain CRLF break is cut before its \r
+        assert_eq!(preview_cut(b"line one\r\nline two continues", 18), 8);
+        // a blank line in the first half is not worth collapsing to: use the last newline
+        let early = b"ab\n\ncccccccc\ndddddddd\neeeeeeee";
+        assert_eq!(preview_cut(early, 28), 21);
+    }
+
+    #[test]
     fn headings_skip_fenced_code_and_non_headings() {
-        let doc = "# One
-#notaheading
-####### seven
-```
-# in fence
-```
-~~~
-## in tilde
-~~~
-## Two ##
-    # indented code
-###### Six
-#
-";
+        let doc = "# One\n#notaheading\n####### seven\n```\n# in fence\n```\n~~~\n## in tilde\n~~~\n## Two ##\n    # indented code\n###### Six\n#\n";
         let (found, capped) = headings_of(doc, u64::MAX, 500);
         assert!(!capped);
         assert_eq!(pairs(&found), vec![(1, "One"), (2, "Two"), (6, "Six")]);
@@ -459,11 +500,7 @@ line two continues",
     #[test]
     fn heading_text_is_trimmed_and_closing_hashes_stripped() {
         let (found, _) = headings_of(
-            "##   Spaced   
-# C#
-### Title ###   
-# ###
-",
+            "##   Spaced   \n# C#\n### Title ###   \n# ###\n",
             u64::MAX,
             500,
         );
@@ -472,22 +509,14 @@ line two continues",
 
     #[test]
     fn a_longer_fence_is_not_closed_by_a_shorter_one() {
-        let doc = "````
-```
-# still code
-````
-# real
-";
+        let doc = "````\n```\n# still code\n````\n# real\n";
         let (found, _) = headings_of(doc, u64::MAX, 500);
         assert_eq!(pairs(&found), vec![(1, "real")]);
     }
 
     #[test]
     fn heading_cap_reports_truncation() {
-        let doc = "# a
-# b
-# c
-";
+        let doc = "# a\n# b\n# c\n";
         let (found, capped) = headings_of(doc, u64::MAX, 2);
         assert_eq!(found.len(), 2);
         assert!(capped);
@@ -498,14 +527,54 @@ line two continues",
 
     #[test]
     fn in_preview_is_true_only_for_lines_inside_the_cut() {
-        let doc = "# a
-
-
-
-# b
-";
-        // "# a" ends at byte 3, "# b" at byte 12
+        let doc = "# a\r\n\r\n# b\n";
+        // "# a" ends at byte 3, "# b" at byte 11
         let (found, _) = headings_of(doc, 3, 500);
+        assert_eq!(
+            found.iter().map(|h| h.in_preview).collect::<Vec<_>>(),
+            vec![true, false]
+        );
+        let (found, _) = headings_of(doc, 10, 500);
+        assert!(found.iter().all(|h| h.in_preview));
+    }
+
+    #[test]
+    fn overlong_lines_are_skipped_without_losing_offsets_or_fence_state() {
+        let long = "x".repeat(MAX_LINE * 3 + 17);
+        // an overlong "heading" is never a heading; the next line's offset stays exact
+        let doc = format!("# a\n# {long}\n# b\n");
+        let end_of_b = doc.len() as u64 - 1;
+        let (found, _) = headings_of(&doc, end_of_b, 500);
+        assert_eq!(pairs(&found), vec![(1, "a"), (1, "b")]);
+        assert!(found[1].in_preview);
+        let (found, _) = headings_of(&doc, end_of_b - 1, 500);
+        assert!(!found[1].in_preview);
+        // a line of exactly MAX_LINE bytes plus newline is still read normally
+        let exact = format!("# {}\n# c\n", "y".repeat(MAX_LINE - 3));
+        let (found, _) = headings_of(&exact, u64::MAX, 500);
+        assert_eq!(found.len(), 2);
+        // fence state survives an overlong line inside the fence
+        let fenced = format!("```\n{long}\n# hidden\n```\n# shown\n");
+        let (found, _) = headings_of(&fenced, u64::MAX, 500);
+        assert_eq!(pairs(&found), vec![(1, "shown")]);
+        // overlong last line without a newline
+        let tail = format!("# a\n{long}");
+        let (found, capped) = headings_of(&tail, u64::MAX, 500);
+        assert_eq!(pairs(&found), vec![(1, "a")]);
+        assert!(!capped);
+    }
+
+    #[test]
+    fn invalid_utf8_never_breaks_offsets() {
+        // invalid byte at EOF, no trailing newline
+        let doc = b"# ok\n# bad\xff";
+        let (found, _) = headings_of_bytes(doc, doc.len() as u64, 500);
+        assert_eq!(found.len(), 2);
+        assert_eq!(found[1].text, "bad\u{fffd}");
+        assert!(found[1].in_preview);
+        // invalid bytes right before a CRLF: raw terminator length is used
+        let doc = b"# a\xff\xfe\r\n# b\n";
+        let (found, _) = headings_of_bytes(doc, 6, 500);
         assert_eq!(
             found.iter().map(|h| h.in_preview).collect::<Vec<_>>(),
             vec![true, false]
@@ -513,27 +582,30 @@ line two continues",
     }
 
     #[test]
+    fn invalid_utf8_at_the_preview_boundary_is_cut_safely() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.md");
+        let mut bytes = b"# head\n\nsome text ".to_vec();
+        bytes.extend_from_slice(&[0x80; 8]); // stray continuation bytes
+        bytes.extend_from_slice(b"\n\n# tail\n");
+        std::fs::write(&path, &bytes).unwrap();
+        let out = read_limited(&path, 22).unwrap();
+        assert!(out.truncated);
+        assert_eq!(out.shown_bytes as usize, out.text.len().min(22));
+        assert_eq!(pairs(&out.headings), vec![(1, "head"), (1, "tail")]);
+        assert!(out.headings[0].in_preview && !out.headings[1].in_preview);
+    }
+
+    #[test]
     fn read_limited_returns_whole_small_files_with_outline() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.md");
-        std::fs::write(
-            &path,
-            "# Hi
-
-text
-",
-        )
-        .unwrap();
+        std::fs::write(&path, "# Hi\n\ntext\n").unwrap();
         let out = read_limited(&path, 1024).unwrap();
-        assert_eq!(
-            out.text,
-            "# Hi
-
-text
-"
-        );
+        assert_eq!(out.text, "# Hi\n\ntext\n");
         assert!(!out.truncated);
         assert_eq!(out.total_bytes, 11);
+        assert_eq!(out.shown_bytes, 11);
         assert_eq!(pairs(&out.headings), vec![(1, "Hi")]);
         assert!(out.headings[0].in_preview);
         assert!(!out.headings_truncated);
@@ -543,22 +615,13 @@ text
     fn read_limited_cuts_large_files_at_a_paragraph_and_outlines_everything() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.md");
-        let doc = "# First
-
-alpha beta
-
-## Second
-
-gamma delta epsilon zeta
-
-## Late
-
-end
-";
+        let doc =
+            "# First\n\nalpha beta\n\n## Second\n\ngamma delta epsilon zeta\n\n## Late\n\nend\n";
         std::fs::write(&path, doc).unwrap();
         let out = read_limited(&path, 40).unwrap();
         assert!(out.truncated);
         assert_eq!(out.total_bytes, doc.len() as u64);
+        assert_eq!(out.shown_bytes as usize, out.text.len());
         assert!(doc.starts_with(&out.text));
         assert!(out.text.ends_with("## Second"), "{:?}", out.text);
         assert_eq!(

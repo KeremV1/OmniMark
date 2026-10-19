@@ -39,9 +39,8 @@ export function createPreview(actions: Actions): Preview {
     svg(icons.close),
   );
   const truncatedText = h('span', {});
-  const truncatedReveal = h('button', { class: 'btn btn-small', type: 'button' }, t('action.showFile'));
   const truncatedOpen = h('button', { class: 'btn btn-small', type: 'button' }, t('action.openDefault'));
-  const truncated = h('p', { class: 'preview-note', hidden: true }, svg(icons.info), truncatedText, truncatedReveal, truncatedOpen);
+  const truncated = h('p', { class: 'preview-note', hidden: true }, svg(icons.info), truncatedText, truncatedOpen);
   const outline = createOutline();
   // Rendered headings of the Görünüm tab, in document order (empty on the Kaynak tab).
   let renderedHeadings: HTMLElement[] = [];
@@ -93,7 +92,7 @@ export function createPreview(actions: Actions): Preview {
       const lang = getLang();
       setText(
         truncatedText,
-        t('preview.truncated', { shown: formatBytes(new TextEncoder().encode(loaded.text).length, lang), total: formatBytes(loaded.totalBytes, lang) }),
+        t('preview.truncated', { shown: formatBytes(loaded.shownBytes, lang), total: formatBytes(loaded.totalBytes, lang) }),
       );
     }
     outline.set(loaded.headings, loaded.headingsTruncated, jumpTo);
@@ -126,11 +125,11 @@ export function createPreview(actions: Actions): Preview {
     if (target !== null && target !== undefined) renderedHeadings[target].scrollIntoView({ block: 'start' });
   }
 
-  /** Called when the preview closes or switches file: free the DOM first, then ask for a memory trim. */
+  /** Called when the preview closes: free the DOM first, then ask for a memory trim. */
   function discard(): void {
     loaded = null;
     release();
-    void trimMemory().catch(() => undefined);
+    trimMemory().catch((err: unknown) => console.warn('trim_memory failed', err));
   }
 
   async function load(nextOutput: string): Promise<void> {
@@ -159,7 +158,6 @@ export function createPreview(actions: Actions): Preview {
     });
   }
   reveal.addEventListener('click', () => output && actions.reveal(output));
-  truncatedReveal.addEventListener('click', () => output && actions.reveal(output));
   truncatedOpen.addEventListener('click', () => {
     if (output) openOutput(output).catch((err: unknown) => actions.fail(err));
   });
@@ -199,7 +197,10 @@ export function createPreview(actions: Actions): Preview {
         return;
       }
       if (item && (item.path !== path || nextOutput !== output)) {
-        if (loaded !== null) discard();
+        if (loaded !== null) {
+          loaded = null;
+          release();
+        }
         path = item.path;
         output = nextOutput;
         setText(title, fileName(nextOutput));

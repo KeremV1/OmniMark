@@ -24,3 +24,14 @@ describe('outline', () => {
     expect(matchHeadings([o(2, 'A')], [o(3, 'A')])).toEqual([null]);
   });
 });
+
+describe('outline matching details', () => {
+  it('prefers an exact match over an earlier prefix match', () => {
+    const rendered = [o(2, 'Docs and more'), o(2, 'Docs')];
+    expect(matchHeadings([o(2, 'Docs')], rendered)).toEqual([1]);
+  });
+  it('never matches an empty rendered heading', () => {
+    expect(matchHeadings([o(2, 'Real')], [o(2, ''), o(2, 'Real')])).toEqual([1]);
+    expect(matchHeadings([o(2, 'Real')], [o(2, '')])).toEqual([null]);
+  });
+});

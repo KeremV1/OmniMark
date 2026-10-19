@@ -61,6 +61,8 @@ export interface OutputText {
   truncated: boolean;
   /** Size of the whole file in bytes. */
   totalBytes: number;
+  /** Exact byte length of `text`. */
+  shownBytes: number;
   /** Headings of the whole document, not only of the returned text. */
   headings: OutlineHeading[];
   headingsTruncated: boolean;
