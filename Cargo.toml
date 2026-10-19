@@ -25,9 +25,43 @@ pdfium-render = "0.9.4"
 clap = { version = "4.6.7", features = ["derive", "env"] }
 regex = "1.13.1"
 tempfile = "3.27.0"
+sha2 = "0.10.9"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp", "tiff"] }
+nom-exif = "3.8.0"
+imagesize = "0.15.0"
+ocrs = { version = "0.13.1", default-features = false, features = ["onnx"] }
+rten = { version = "0.26.0", default-features = false, features = ["onnx_format"] }
+ureq = "3.4.2"
+dirs = "7.0.0"
+windows = { version = "0.62.2", features = ["Foundation", "Foundation_Collections", "Globalization", "Graphics_Imaging", "Media_Ocr", "Storage_Streams"] }
+ab_glyph = "0.2.32"
 
 [profile.release]
 opt-level = "s"
 lto = true
 codegen-units = 1
 strip = true
+
+# ocrs/rten are unusably slow without optimisation (ocrs README); applies to dev/test builds only.
+[profile.dev.package.ocrs]
+opt-level = 3
+[profile.dev.package.rten]
+opt-level = 3
+[profile.dev.package.rten-base]
+opt-level = 3
+[profile.dev.package.rten-gemm]
+opt-level = 3
+[profile.dev.package.rten-imageproc]
+opt-level = 3
+[profile.dev.package.rten-onnx]
+opt-level = 3
+[profile.dev.package.rten-parallel]
+opt-level = 3
+[profile.dev.package.rten-shape-inference]
+opt-level = 3
+[profile.dev.package.rten-simd]
+opt-level = 3
+[profile.dev.package.rten-tensor]
+opt-level = 3
+[profile.dev.package.rten-vecmath]
+opt-level = 3

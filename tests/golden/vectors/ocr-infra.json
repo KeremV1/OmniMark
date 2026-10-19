@@ -1,0 +1,15 @@
+[
+  {
+    "file": "test.json",
+    "ocr": true,
+    "exclude": ["[Image OCR]"],
+    "note": "Text formats ignore OCR."
+  },
+  {
+    "file": "xlsx_image_start.xlsx",
+    "dir": "ocr",
+    "extract_images": false,
+    "exact": "## Sales Q1\n\n| Product | Sales |\n| --- | --- |\n| Widget A | 100 |\n| Widget B | 150 |\n\n## Forecast Q2\n\n| Projected Sales |  |\n| --- | --- |\n| Widget A | 120 |\n| Widget B | 180 |",
+    "note": "OCR fixtures load from tests/fixtures/markitdown/ocr; OCR off adds nothing (M1 output)."
+  }
+]
