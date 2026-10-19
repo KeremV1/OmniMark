@@ -126,7 +126,22 @@ export function installDevMock(): void {
           cancelRun?.();
           return null;
         case 'read_output':
-          return { text: SAMPLE_MARKDOWN, truncated: false };
+          return {
+            text: SAMPLE_MARKDOWN,
+            truncated: true,
+            totalBytes: 5_033_165,
+            shownBytes: 261_900,
+            headings: [
+              { level: 1, text: 'Yıllık rapor 2026', inPreview: true },
+              { level: 2, text: 'Öne çıkanlar', inPreview: true },
+              { level: 2, text: 'Çeyrek sonuçları', inPreview: true },
+              { level: 2, text: 'Bölge ofisleri', inPreview: false },
+              { level: 3, text: 'İstanbul', inPreview: false },
+              { level: 3, text: 'Ankara', inPreview: false },
+              { level: 2, text: 'Ekler', inPreview: false },
+            ],
+            headingsTruncated: true,
+          };
         case 'plugin:dialog|open':
           return (args.options as { directory?: boolean })?.directory ? 'C:\\Users\\Kerem\\Desktop\\Markdown' : SAMPLES.map((s) => s.path);
         default:

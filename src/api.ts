@@ -49,9 +49,23 @@ export interface Settings {
   language: SettingsLanguage;
 }
 
+export interface OutlineHeading {
+  level: number;
+  text: string;
+  /** The heading line lies inside the returned (capped) text. */
+  inPreview: boolean;
+}
+
 export interface OutputText {
   text: string;
   truncated: boolean;
+  /** Size of the whole file in bytes. */
+  totalBytes: number;
+  /** Exact byte length of `text`. */
+  shownBytes: number;
+  /** Headings of the whole document, not only of the returned text. */
+  headings: OutlineHeading[];
+  headingsTruncated: boolean;
 }
 
 export type ConvertEvent =
@@ -85,6 +99,16 @@ export function cancel(): Promise<void> {
 
 export function readOutput(path: string): Promise<OutputText> {
   return invoke('read_output', { path });
+}
+
+/** Opens a produced `.md` in the default application. */
+export function openOutput(path: string): Promise<void> {
+  return invoke('open_output', { path });
+}
+
+/** Asks the backend to re-apply the WebView2 memory level (no-op off Windows). */
+export function trimMemory(): Promise<void> {
+  return invoke('trim_memory');
 }
 
 export function openOutputDir(): Promise<void> {
