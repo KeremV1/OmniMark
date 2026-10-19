@@ -21,15 +21,16 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** ✅ M1 tamamlandı (19/19 görev) ve `main`'e birleşti. Windows'ta çalışan bir masaüstü uygulaması ve komut satırı aracı var; sıradaki aşama M2.
+> **Durum:** ✅ M1 tamamlandı. 🔄 M2 (görsel metadata + OCR): tasarım ve 8 görevlik plan hazır; kodlama sonraki oturumda başlıyor.
 
 ## Kaldığımız yer
 
-**Geldiğimiz nokta (2026-10-19):** M1 bitti; ardından büyük belge önizlemesi hafifletildi.
+**Geldiğimiz nokta (2026-10-20):** M1 bitti; büyük belge önizlemesi hafifletildi; M2 tasarlandı ve planlandı.
 - **Dönüştürücüler:** PDF (pdfium; tablo ve form tespiti), Word (başlık, liste, tablo, görsel, dipnot, formül → LaTeX), Excel (XLSX/XLSM/XLS/ODS), PowerPoint (slayt, tablo, grafik, not), HTML, CSV (`;`/sekme tespiti), TXT/MD/JSON.
 - **Masaüstü uygulaması (Tauri 2):** dosya kuyruğu, sürükle-bırak, ilerleme, filtreler, Markdown önizleme (Görünüm/Kaynak), ayarlar, kısayollar, açık/koyu tema, Türkçe/İngilizce.
 - **Komut satırı:** `omnimark convert dosya.pdf -o çıktı`.
 - **Güvenlik:** kötü niyetli dosyalara karşı bellek/boyut sınırları, harici bağlantılar asla açılmaz, çökmeler dosya bazında yalıtılır, arayüz yalnızca çıktı klasöründeki `.md` dosyalarını okuyabilir.
+- **M2 hazırlığı:** [tasarım](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md) ve [8 görevlik plan](docs/superpowers/plans/2026-10-19-omnimark-m2/00-genel.md). İki OCR motoru: Windows yerleşik (indirmesiz, Türkçe destekli) ve ocrs (tüm platformlar, ~12 MB model isteğe bağlı iner; Türkçe harf tanımıyor). OCR varsayılan kapalı.
 - **Önizleme:** belgenin ilk ~64 KB'ı çizilir; üstte belgenin **tamamının başlık listesi** görünür; kesildiyse "ilk 64 KB gösteriliyor" şeridi ve **Varsayılan uygulamada aç** düğmesi çıkar. Büyük belgede önizleme belleği +294 MB'tan **+24 MB**'a indi (hedef +50 MB ✅); kapatınca ~21 MB WebView2'de kalıyor (önizleme boyutundan bağımsız).
 - **Testler:** 160 Rust + 27 arayüz testi geçiyor; CI her push'ta Windows, macOS ve Linux'ta yeşil.
 - **Ölçümler (Windows, kurulu sürüm):** kurulum dosyası **5,4 MB** · pencere açılışı **59 ms** · boşta bellek **71 MB** (Görev Yöneticisi "Bellek" toplamı, WebView2 dahil; hedef < 100 MB ✅). Ayrıntı: [docs/m1-olcumler.md](docs/m1-olcumler.md).
@@ -95,7 +96,7 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 | Aşama | Kapsam | Yol haritası adımları | Durum | İlerleme |
 | --- | --- | --- | --- | --- |
 | **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | ✅ Tamamlandı | 19/19 görev |
-| **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | 🔄 Sürüyor | tasarım hazır |
+| **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | 🔄 Sıradaki | tasarım + plan hazır, 0/8 görev |
 | **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏳ Planlandı | — |
 | **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans iyileştirmeleri | 7 | ⏳ Planlandı | — |
 | **M5** | Windows, macOS ve Linux kurulum paketleri, imzalama | 8 | ⏳ Planlandı | — |
