@@ -1,3 +1,5 @@
+import { getVersion } from '@tauri-apps/api/app';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { openLogDir, pickFolder, type Settings, type SettingsLanguage } from '../api';
 import { t } from '../i18n';
 import { h, icons, setText, svg } from './dom';
@@ -10,6 +12,7 @@ export interface SettingsDialogOptions {
   describeError(error: unknown): string;
 }
 
+const AUTHOR_URL = 'https://github.com/KeremV1';
 const MIN_WORKERS = 1;
 const MAX_WORKERS = 8;
 
@@ -73,6 +76,27 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     openLogDir().catch(onError);
   });
 
+  const version = h('span', { class: 'about-version' });
+  getVersion()
+    .then((v) => {
+      if (v) setText(version, ` ${v}`);
+    })
+    .catch((err: unknown) => console.warn('app version unavailable', err));
+  const author = h('a', { href: AUTHOR_URL, class: 'about-link' }, 'github.com/KeremV1');
+  author.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    setDialogError(errorLine, null);
+    openUrl(AUTHOR_URL).catch(onError);
+  });
+  const about = h(
+    'section',
+    { class: 'about', 'aria-labelledby': 'about-title' },
+    h('h3', { class: 'about-title', id: 'about-title' }, t('settings.about')),
+    h('p', {}, h('strong', {}, 'OmniMark'), version),
+    h('p', {}, 'MoNoR · ', author),
+    h('p', {}, t('settings.license')),
+  );
+
   const cancel = h('button', { class: 'btn', type: 'button' }, t('action.cancel'));
   const save = h('button', { class: 'btn btn-primary', type: 'submit' }, t('action.save')) as HTMLButtonElement;
 
@@ -100,6 +124,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     ),
     h('div', { class: 'field field-inline' }, h('label', { for: 'set-lang' }, t('settings.language')), language),
     h('div', { class: 'field' }, logs),
+    about,
     errorLine,
     h('div', { class: 'dialog-actions' }, cancel, save),
   );

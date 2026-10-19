@@ -45,6 +45,8 @@ const tr = {
   'settings.language': 'Dil',
   'settings.languageAuto': 'Sistem',
   'settings.openLogs': 'Günlük klasörünü aç',
+  'settings.about': 'Hakkında',
+  'settings.license': 'MIT Lisansı',
   'notice.truncated': 'Çok fazla dosya seçildi; yalnızca ilk {n} dosya eklendi.',
   'error.unsupported': 'Bu dosya türü desteklenmiyor.',
   'error.corrupt': 'Dosya bozuk veya okunamıyor.',
@@ -75,6 +77,7 @@ const tr = {
   'filter.label': 'Listeyi süz',
   'status.percent': '%{n}',
   'status.warnings': '{n} uyarı',
+  'status.warning1': '1 uyarı',
   'preview.label': 'Önizleme',
   'preview.empty': 'Bu dosyadan boş bir Markdown çıktı.',
   'details.file': 'Dosya',
@@ -145,6 +148,8 @@ const en: Record<MessageKey, string> = {
   'settings.language': 'Language',
   'settings.languageAuto': 'System',
   'settings.openLogs': 'Open log folder',
+  'settings.about': 'About',
+  'settings.license': 'MIT License',
   'notice.truncated': 'Too many files selected; only the first {n} were added.',
   'error.unsupported': 'This file type is not supported.',
   'error.corrupt': 'The file is corrupt or unreadable.',
@@ -175,6 +180,7 @@ const en: Record<MessageKey, string> = {
   'filter.label': 'Filter the list',
   'status.percent': '{n}%',
   'status.warnings': '{n} warnings',
+  'status.warning1': '1 warning',
   'preview.label': 'Preview',
   'preview.empty': 'This file produced an empty Markdown file.',
   'details.file': 'File',
@@ -221,4 +227,9 @@ export function t(key: MessageKey, vars?: Record<string, string | number>): stri
   const text = messages[current][key];
   if (!vars) return text;
   return text.replace(/\{(\w+)\}/g, (m, name: string) => (name in vars ? String(vars[name]) : m));
+}
+
+/** "1 warning" for one, "{n} warnings" otherwise. */
+export function warningsLabel(n: number): string {
+  return n === 1 ? t('status.warning1') : t('status.warnings', { n });
 }

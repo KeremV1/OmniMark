@@ -3,7 +3,8 @@
  * `import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)`, so it never ships.
  *
  * `?scenario=` picks a screen for screenshots: `queue` (default), `empty`, `drag`,
- * `preview`, `settings`, `details`, `menu`.
+ * `idle` (files added, nothing converted), `preview`, `settings`, `details`, `menu`.
+ * `&lang=en|tr` forces the UI language.
  */
 import type { Channel } from '@tauri-apps/api/core';
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
@@ -47,7 +48,13 @@ Ayrıntılar için https://example.com/rapor adresine bakın.
 <script>alert('bu metin olarak görünmeli')</script>
 `;
 
-let settings: Settings = { outputDir: OUT, extractImages: true, workers: 2, language: 'auto' };
+const forcedLang = new URLSearchParams(location.search).get('lang');
+let settings: Settings = {
+  outputDir: OUT,
+  extractImages: true,
+  workers: 2,
+  language: forcedLang === 'en' || forcedLang === 'tr' ? forcedLang : 'auto',
+};
 let cancelRun: (() => void) | null = null;
 
 function outputOf(path: string): string {
@@ -130,7 +137,7 @@ export function installDevMock(): void {
             text: SAMPLE_MARKDOWN,
             truncated: true,
             totalBytes: 5_033_165,
-            shownBytes: 261_900,
+            shownBytes: 65_300,
             headings: [
               { level: 1, text: 'Yıllık rapor 2026', inPreview: true },
               { level: 2, text: 'Öne çıkanlar', inPreview: true },
@@ -142,6 +149,8 @@ export function installDevMock(): void {
             ],
             headingsTruncated: true,
           };
+        case 'plugin:app|version':
+          return '0.1.0';
         case 'plugin:dialog|open':
           return (args.options as { directory?: boolean })?.directory ? 'C:\\Users\\Kerem\\Desktop\\Markdown' : SAMPLES.map((s) => s.path);
         default:
@@ -160,6 +169,7 @@ export function runScenario(actions: Actions): void {
     return;
   }
   actions.addPaths(SAMPLES.map((s) => s.path));
+  if (scenario === 'idle') return;
   setTimeout(() => {
     actions.convertPaths([SAMPLES[0].path, SAMPLES[1].path, SAMPLES[4].path]);
   }, 50);
