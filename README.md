@@ -32,17 +32,17 @@
 - **Masaüstü uygulaması (Tauri 2):** dosya kuyruğu, sürükle-bırak, ilerleme, filtreler, Markdown önizleme (Görünüm/Kaynak), ayarlar, kısayollar, açık/koyu tema, Türkçe/İngilizce.
 - **Komut satırı:** `omnimark convert dosya.pdf -o çıktı`.
 - **Güvenlik:** kötü niyetli dosyalara karşı bellek/boyut sınırları, harici bağlantılar asla açılmaz, çökmeler dosya bazında yalıtılır, arayüz yalnızca çıktı klasöründeki `.md` dosyalarını okuyabilir.
-- **Önizleme:** belgenin ilk ~64 KB'ı çizilir; üstte belgenin **tamamının başlık listesi** görünür; kesildiyse "ilk 64 KB gösteriliyor" şeridi ve **Varsayılan uygulamada aç** düğmesi çıkar. Büyük belgede önizleme belleği +294 MB'tan **+59 MB**'a indi (hedef +50 MB, az farkla kaçıyor).
+- **Önizleme:** belgenin ilk ~64 KB'ı çizilir; üstte belgenin **tamamının başlık listesi** görünür; kesildiyse "ilk 64 KB gösteriliyor" şeridi ve **Varsayılan uygulamada aç** düğmesi çıkar. Büyük belgede önizleme belleği +294 MB'tan **+24 MB**'a indi (hedef +50 MB ✅); kapatınca ~21 MB WebView2'de kalıyor (önizleme boyutundan bağımsız).
 - **Testler:** 160 Rust + 26 arayüz testi geçiyor; CI her push'ta Windows, macOS ve Linux'ta yeşil.
 - **Ölçümler (Windows, kurulu sürüm):** kurulum dosyası **5,4 MB** · pencere açılışı **59 ms** · boşta bellek **71 MB** (Görev Yöneticisi "Bellek" toplamı, WebView2 dahil; hedef < 100 MB ✅). Ayrıntı: [docs/m1-olcumler.md](docs/m1-olcumler.md).
 
 **Sıradaki iş:**
 1. **Elle yapılacak testler** (aşağıda) ve sonuçlarına göre düzeltmeler.
-2. **Önizleme belleği, son adım (karar bekliyor):** hedef +50 MB az farkla kaçıyor (+59 MB; kapatınca +21 MB kalıyor). Seçenek: çizilen sınırı 256 KB'tan 128 KB'a indirmek ya da mevcut hali kabul etmek.
-3. **M2:** görsel metadata (EXIF) + OCR — önce tasarım, sonra plan.
+2. **M2 (sürüyor):** görsel dosyaları (EXIF/XMP metadata) ve isteğe bağlı OCR — [M2 tasarımı](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md).
+3. **M3:** ses transkripsiyonu (yerel Whisper, isteğe bağlı modül).
 
 **Elle yapılacak testler** (aşağıda) ve sonuçlarına göre düzeltmeler.
-3. **M2:** görsel metadata (EXIF) + OCR — önce tasarım, sonra plan.
+3. **M3:** ses transkripsiyonu (yerel Whisper, isteğe bağlı modül).
 
 **Elle yapılacak testler** (otomatikleştirilemeyenler):
 - [ ] Explorer'dan dosya ve klasör sürükle-bırak (klasörde desteklenmeyen dosyalar bilerek atlanır).
@@ -116,7 +116,7 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 | Aşama | Kapsam | Yol haritası adımları | Durum | İlerleme |
 | --- | --- | --- | --- | --- |
 | **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | ✅ Tamamlandı | 19/19 görev |
-| **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | ⏳ Sıradaki | — |
+| **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | 🔄 Sürüyor | tasarım hazır |
 | **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏳ Planlandı | — |
 | **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans iyileştirmeleri | 7 | ⏳ Planlandı | — |
 | **M5** | Windows, macOS ve Linux kurulum paketleri, imzalama | 8 | ⏳ Planlandı | — |
