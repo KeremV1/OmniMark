@@ -8,17 +8,21 @@
 
 ![OmniMark M1 arayüzü](docs/img/omnimark-m1.png)
 
-**Geldiğimiz nokta (2026-10-19):** M1 bitti.
+**Geldiğimiz nokta (2026-10-19):** M1 bitti; ardından büyük belge önizlemesi hafifletildi.
 - **Dönüştürücüler:** PDF (pdfium; tablo ve form tespiti), Word (başlık, liste, tablo, görsel, dipnot, formül → LaTeX), Excel (XLSX/XLSM/XLS/ODS), PowerPoint (slayt, tablo, grafik, not), HTML, CSV (`;`/sekme tespiti), TXT/MD/JSON.
 - **Masaüstü uygulaması (Tauri 2):** dosya kuyruğu, sürükle-bırak, ilerleme, filtreler, Markdown önizleme (Görünüm/Kaynak), ayarlar, kısayollar, açık/koyu tema, Türkçe/İngilizce.
 - **Komut satırı:** `omnimark convert dosya.pdf -o çıktı`.
 - **Güvenlik:** kötü niyetli dosyalara karşı bellek/boyut sınırları, harici bağlantılar asla açılmaz, çökmeler dosya bazında yalıtılır, arayüz yalnızca çıktı klasöründeki `.md` dosyalarını okuyabilir.
-- **Testler:** 148 Rust + 17 arayüz testi geçiyor; CI her push'ta Windows, macOS ve Linux'ta yeşil.
+- **Önizleme:** belgenin ilk ~256 KB'ı çizilir; üstte belgenin **tamamının başlık listesi** görünür; kesildiyse "ilk 256 KB gösteriliyor" şeridi ve **Varsayılan uygulamada aç** düğmesi çıkar. Büyük belgede önizleme belleği +294 MB'tan **+59 MB**'a indi (hedef +50 MB, az farkla kaçıyor).
+- **Testler:** 160 Rust + 24 arayüz testi geçiyor; CI her push'ta Windows, macOS ve Linux'ta yeşil.
 - **Ölçümler (Windows, kurulu sürüm):** kurulum dosyası **5,4 MB** · pencere açılışı **59 ms** · boşta bellek **71 MB** (Görev Yöneticisi "Bellek" toplamı, WebView2 dahil; hedef < 100 MB ✅). Ayrıntı: [docs/m1-olcumler.md](docs/m1-olcumler.md).
 
 **Sıradaki iş:**
-1. **Büyük belge önizlemesinin belleği:** çok büyük bir belgenin biçimlendirilmiş önizlemesi (Görünüm) ~370 MB ek bellek tutuyor ve kapatınca yavaş geri veriyor. Çözüm önerisi: önizlemeyi sınırlamak ya da yalnızca görünen kısmı çizmek (onay bekliyor).
-2. **Elle yapılacak testler** (aşağıda) ve sonuçlarına göre düzeltmeler.
+1. **Elle yapılacak testler** (aşağıda) ve sonuçlarına göre düzeltmeler.
+2. **Önizleme belleği, son adım (karar bekliyor):** hedef +50 MB az farkla kaçıyor (+59 MB; kapatınca +21 MB kalıyor). Seçenek: çizilen sınırı 256 KB'tan 128 KB'a indirmek ya da mevcut hali kabul etmek.
+3. **M2:** görsel metadata (EXIF) + OCR — önce tasarım, sonra plan.
+
+**Elle yapılacak testler** (aşağıda) ve sonuçlarına göre düzeltmeler.
 3. **M2:** görsel metadata (EXIF) + OCR — önce tasarım, sonra plan.
 
 **Elle yapılacak testler** (otomatikleştirilemeyenler):
@@ -27,7 +31,7 @@
 - [ ] Dönüştürme sırasında **İptal**.
 - [ ] Önizlemede **Kopyala**: WebView2 pano izni soruyor mu?
 - [ ] Ayarlarda dil değişimi, paralel işçi sayısı, görselleri çıkar seçeneği.
-- [ ] Büyük bir PDF/Word ile dönüştürme ve önizleme; Görev Yöneticisi'nde bellek.
+- [ ] Büyük bir PDF/Word ile dönüştürme ve önizleme: başlık listesi, "ilk 256 KB" şeridi, **Varsayılan uygulamada aç**; Görev Yöneticisi'nde bellek.
 
 Kontrol edilecek diğer konular: oturum boyunca senin adına verilen kararlar [HANDOFF.md](HANDOFF.md) dosyasında listeli.
 
