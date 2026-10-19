@@ -27,6 +27,13 @@ pub enum MemoryLevel {
     Low,
 }
 
+/// Whether the level must be pushed to WebView2: always the first time, then only on change.
+/// Resize events fire continuously while dragging, and every call makes WebView2 trim memory.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn needs_update(last: Option<MemoryLevel>, next: MemoryLevel) -> bool {
+    last != Some(next)
+}
+
 /// Memory policy. Currently Low always (measured config: 79.9 MB -> 61.1 MB idle).
 /// To use Normal while the window is focused, return `Normal` when `focused && !minimized`.
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -35,14 +42,14 @@ pub fn memory_level(_focused: bool, _minimized: bool) -> MemoryLevel {
 }
 
 #[cfg(windows)]
-pub fn apply<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, focused: bool, minimized: bool) {
+pub fn apply<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, wanted: MemoryLevel) {
     use webview2_com::Microsoft::Web::WebView2::Win32::{
         ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL,
         COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
     };
     use windows_core::Interface;
 
-    let level: COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL = match memory_level(focused, minimized) {
+    let level: COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL = match wanted {
         MemoryLevel::Low => COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
         MemoryLevel::Normal => COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
     };
@@ -92,18 +99,33 @@ pub fn build_main_window(app: &tauri::App) -> tauri::Result<()> {
     let window = builder.build()?;
     #[cfg(windows)]
     {
-        apply(&window, true, false);
+        let last = std::sync::Mutex::new(None::<MemoryLevel>);
         let watched = window.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::Focused(focused) = event {
-                let minimized = watched.is_minimized().unwrap_or(false);
-                apply(&watched, *focused, minimized);
-            } else if let tauri::WindowEvent::Resized(_) = event {
-                // Minimizing resizes the window; re-evaluate the policy.
-                let minimized = watched.is_minimized().unwrap_or(false);
-                let focused = watched.is_focused().unwrap_or(true);
-                apply(&watched, focused, minimized);
+        let refresh = move |focused: bool| {
+            let minimized = watched.is_minimized().unwrap_or_else(|e| {
+                log::debug!("is_minimized failed: {e}");
+                false
+            });
+            let next = memory_level(focused, minimized);
+            let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
+            if needs_update(*last, next) {
+                *last = Some(next);
+                apply(&watched, next);
             }
+        };
+        refresh(true);
+        let for_focus = window.clone();
+        window.on_window_event(move |event| match event {
+            tauri::WindowEvent::Focused(focused) => refresh(*focused),
+            // Minimizing resizes the window; re-evaluate (deduplicated by `needs_update`).
+            tauri::WindowEvent::Resized(_) => {
+                let focused = for_focus.is_focused().unwrap_or_else(|e| {
+                    log::debug!("is_focused failed: {e}");
+                    true
+                });
+                refresh(focused)
+            }
+            _ => {}
         });
     }
     Ok(())
@@ -126,6 +148,19 @@ mod tests {
         }
         assert!(!args.contains("--disable-gpu"));
         assert!(!args.contains("--single-process"));
+    }
+
+    #[test]
+    fn needs_update_only_on_first_call_or_change() {
+        assert!(needs_update(None, MemoryLevel::Low));
+        assert!(needs_update(None, MemoryLevel::Normal));
+        assert!(!needs_update(Some(MemoryLevel::Low), MemoryLevel::Low));
+        assert!(!needs_update(
+            Some(MemoryLevel::Normal),
+            MemoryLevel::Normal
+        ));
+        assert!(needs_update(Some(MemoryLevel::Low), MemoryLevel::Normal));
+        assert!(needs_update(Some(MemoryLevel::Normal), MemoryLevel::Low));
     }
 
     #[test]
