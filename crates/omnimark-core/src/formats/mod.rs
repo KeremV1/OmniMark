@@ -3,6 +3,7 @@
 pub mod csv;
 pub mod docx;
 pub mod html;
+pub mod image;
 pub mod omml;
 pub mod pdf;
 pub mod pptx;
@@ -27,6 +28,7 @@ pub fn default_registry(config: &RegistryConfig) -> Registry {
     registry.register(docx::DocxConverter);
     registry.register(xlsx::XlsxConverter);
     registry.register(pptx::PptxConverter);
+    registry.register(image::ImageConverter);
     registry.register(csv::CsvConverter);
     registry.register(html::HtmlConverter);
     registry.register(text::TextConverter);
@@ -39,18 +41,18 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn default_registry_accepts_every_m1_extension_and_rejects_media() {
+    fn default_registry_accepts_documents_and_images_and_rejects_audio() {
         let registry = default_registry(&RegistryConfig::default());
         for ext in [
             "pdf", "docx", "xlsx", "xlsm", "xls", "ods", "pptx", "html", "htm", "csv", "txt", "md",
-            "markdown", "json", "jsonl",
+            "markdown", "json", "jsonl", "jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff",
         ] {
             assert!(
                 registry.accepts_any(Path::new(&format!("f.{ext}")), b""),
                 "{ext}"
             );
         }
-        assert!(!registry.accepts_any(Path::new("photo.jpg"), &[0xFF, 0xD8, 0xFF, 0xE0]));
+        assert!(registry.accepts_any(Path::new("photo.jpg"), &[0xFF, 0xD8, 0xFF, 0xE0]));
         assert!(!registry.accepts_any(
             Path::new("song.mp3"),
             b"ID3\x04\x00\x00\x00\x00\x00\x00\x00"

@@ -25,6 +25,9 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 
 | Fixture | MarkItDown beklentisi | OmniMark beklentisi | Gerekçe |
 | --- | --- | --- | --- |
+| (satır içi testler) | `Keywords: ['a', 'b']` (Python liste biçimi) | `Keywords: a, b` | Okunabilirlik (spec §8 karar 7) |
+| test.jpg ve tüm görseller | OCR yok (OCR yalnız Office/PDF içinde) | OCR açıkken metadata + boş satır + `*[Image OCR]` bloğu | spec §3.3, karar 6 |
+| (satır içi testler) | exiftool ayrı kurulum ister, yoksa çıktı boş | Yerleşik EXIF/XMP okuyucu; HEIC, IPTC ve TIFF içi XMP okunmaz | Dış araç bağımlılığı yok |
 
 ### PDF OCR (M2-4)
 

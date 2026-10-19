@@ -1,0 +1,16 @@
+[
+  {
+    "file": "test.jpg",
+    "regex": ["^ImageSize: 1615x1967\\nTitle: AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation\\nDescription: AutoGen enables diverse LLM-based applications[^\\n]*\\nAuthor: AutoGen Authors\\nDateTimeOriginal: 2024:03:14 22:10:00$"],
+    "exclude": ["[Image OCR]", "Keywords:"]
+  },
+  {
+    "file": "test.jpg",
+    "ocr": true,
+    "include": ["DateTimeOriginal: 2024:03:14 22:10:00\n\n*[Image OCR]\nMOCK_OCR_TEXT_12345\n[End OCR]*"]
+  },
+  {
+    "file": "test_llm.jpg",
+    "regex": ["^ImageSize: \\d+x\\d+"]
+  }
+]
