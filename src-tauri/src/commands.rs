@@ -18,7 +18,7 @@ use crate::AppState;
 /// Largest dropped selection (files after folder expansion) handled in one go.
 const INSPECT_LIMIT: usize = 1000;
 /// Largest preview read from an output file (bytes). Rendering more costs hundreds of MB in WebView2.
-const PREVIEW_LIMIT: usize = 256 * 1024;
+const PREVIEW_LIMIT: usize = 64 * 1024;
 /// Most headings returned for the outline of a document.
 const MAX_HEADINGS: usize = 500;
 
