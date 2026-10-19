@@ -57,16 +57,44 @@ impl WindowsEngine {
     }
 
     fn engine_for(&self, language: OcrLanguage) -> Result<WinOcr, OcrError> {
-        let unavailable = |e: windows::core::Error| OcrError::Unavailable(e.to_string());
+        let mut errors: Vec<String> = Vec::new();
         if let Some(tag) = pick_language(&self.languages, language) {
-            let language =
-                Language::CreateLanguage(&HSTRING::from(tag.as_str())).map_err(unavailable)?;
-            if let Ok(engine) = WinOcr::TryCreateFromLanguage(&language) {
-                return Ok(engine);
+            match create_for_tag(&tag) {
+                Ok(engine) => return Ok(engine),
+                Err(e) => errors.push(e),
             }
         }
-        WinOcr::TryCreateFromUserProfileLanguages().map_err(unavailable)
+        match WinOcr::TryCreateFromUserProfileLanguages() {
+            Ok(engine) => return Ok(engine),
+            Err(e) => errors.push(e.to_string()),
+        }
+        if let Some(tag) = self.languages.first() {
+            match create_for_tag(tag) {
+                Ok(engine) => return Ok(engine),
+                Err(e) => errors.push(e),
+            }
+        }
+        Err(OcrError::Unavailable(if errors.is_empty() {
+            "no matching Windows OCR language".into()
+        } else {
+            errors.join("; ")
+        }))
     }
+}
+
+fn create_for_tag(tag: &str) -> Result<WinOcr, String> {
+    let language = Language::CreateLanguage(&HSTRING::from(tag)).map_err(|e| e.to_string())?;
+    WinOcr::TryCreateFromLanguage(&language).map_err(|e| e.to_string())
+}
+
+/// Size scaled down to fit within `max` x `max`, keeping the aspect ratio; never 0, never larger.
+fn fit_within(width: u32, height: u32, max: u32) -> (u32, u32) {
+    if width <= max && height <= max {
+        return (width, height);
+    }
+    let scale = f64::from(max) / f64::from(width.max(height));
+    let scaled = |side: u32| ((f64::from(side) * scale).round() as u32).clamp(1, max);
+    (scaled(width), scaled(height))
 }
 
 impl OcrEngine for WindowsEngine {
@@ -77,22 +105,31 @@ impl OcrEngine for WindowsEngine {
     fn recognize(&self, image: &OcrImage, language: &OcrLanguage) -> Result<String, OcrError> {
         let failed = |e: windows::core::Error| OcrError::Engine(e.to_string());
         let max = WinOcr::MaxImageDimension().map_err(failed)?;
-        if image.width() > max || image.height() > max {
-            return Err(OcrError::Image(format!(
-                "{}x{} exceeds the Windows OCR limit of {max} px",
-                image.width(),
-                image.height()
-            )));
-        }
         let engine = self.engine_for(*language)?;
+        let (width, height) = fit_within(image.width(), image.height(), max);
+        let resized;
+        let rgba: &[u8] = if (width, height) == (image.width(), image.height()) {
+            image.rgba()
+        } else {
+            let source =
+                image::RgbaImage::from_raw(image.width(), image.height(), image.rgba().to_vec())
+                    .ok_or_else(|| OcrError::Image("inconsistent RGBA buffer".into()))?;
+            resized = image::imageops::resize(
+                &source,
+                width,
+                height,
+                image::imageops::FilterType::Lanczos3,
+            );
+            resized.as_raw()
+        };
         let writer = DataWriter::new().map_err(failed)?;
-        writer.WriteBytes(image.rgba()).map_err(failed)?;
+        writer.WriteBytes(rgba).map_err(failed)?;
         let buffer = writer.DetachBuffer().map_err(failed)?;
         let bitmap = SoftwareBitmap::CreateCopyWithAlphaFromBuffer(
             &buffer,
             BitmapPixelFormat::Rgba8,
-            image.width() as i32,
-            image.height() as i32,
+            width as i32,
+            height as i32,
             BitmapAlphaMode::Ignore,
         )
         .map_err(failed)?;
@@ -163,6 +200,31 @@ mod tests {
             println!("{language:?}: {result:?}");
             assert!(result.contains(expected), "{language:?}: {result:?}");
         }
+    }
+
+    #[test]
+    fn fit_within_keeps_aspect_ratio_and_never_hits_zero() {
+        assert_eq!(fit_within(800, 600, 2600), (800, 600));
+        assert_eq!(fit_within(2600, 2600, 2600), (2600, 2600));
+        assert_eq!(fit_within(2480, 3508, 2600), (1838, 2600));
+        assert_eq!(fit_within(5200, 1000, 2600), (2600, 500));
+        assert_eq!(fit_within(100_000, 10, 2600), (2600, 1));
+    }
+
+    #[test]
+    fn reads_images_larger_than_the_engine_limit() {
+        if available_languages().is_empty() {
+            return;
+        }
+        let Some(font) = system_font() else { return };
+        let engine = WindowsEngine::new().unwrap();
+        let text = "The quick brown fox jumps over the lazy dogs ".repeat(5);
+        let image = render_text(&text, &font, 150.0);
+        let max = WinOcr::MaxImageDimension().unwrap();
+        assert!(image.width() > max, "{} vs max {max}", image.width());
+        let result = engine.recognize(&image, &OcrLanguage::En).unwrap();
+        println!("large: {}px -> {result:?}", image.width());
+        assert!(result.contains("quick brown"), "{result:?}");
     }
 
     #[test]
