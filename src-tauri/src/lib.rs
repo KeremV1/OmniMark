@@ -4,6 +4,7 @@ mod inspect;
 mod jobs;
 mod pdfium;
 mod settings;
+mod webview_mem;
 
 use std::sync::{Arc, Mutex};
 
@@ -63,6 +64,7 @@ pub fn run() {
                 default_output_dir: default_out,
                 running: Mutex::new(None),
             });
+            webview_mem::build_main_window(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
