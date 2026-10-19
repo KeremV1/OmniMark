@@ -9,6 +9,7 @@ pub mod error;
 pub mod formats;
 pub mod info;
 pub mod markdown;
+pub mod ocr;
 pub mod ooxml;
 pub mod output;
 pub mod registry;

@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use crate::ocr::{OcrEngine, OcrLanguage};
+
 /// Files larger than this are rejected with `ConvertError::TooLarge`.
 pub const DEFAULT_MAX_FILE_SIZE: u64 = 500 * 1024 * 1024;
 
@@ -30,11 +34,14 @@ impl Document {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct ConvertOptions {
     /// Write embedded images next to the Markdown file.
     pub extract_images: bool,
     pub max_file_size: u64,
+    /// OCR engine for this batch; `None` = OCR off (output identical to M1).
+    pub ocr: Option<Arc<dyn OcrEngine>>,
+    pub ocr_language: OcrLanguage,
 }
 
 impl Default for ConvertOptions {
@@ -42,6 +49,19 @@ impl Default for ConvertOptions {
         Self {
             extract_images: true,
             max_file_size: DEFAULT_MAX_FILE_SIZE,
+            ocr: None,
+            ocr_language: OcrLanguage::Auto,
         }
+    }
+}
+
+impl std::fmt::Debug for ConvertOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConvertOptions")
+            .field("extract_images", &self.extract_images)
+            .field("max_file_size", &self.max_file_size)
+            .field("ocr", &self.ocr.as_ref().map(|engine| engine.name()))
+            .field("ocr_language", &self.ocr_language)
+            .finish()
     }
 }
