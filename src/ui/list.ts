@@ -32,6 +32,33 @@ interface Row {
 /** Width below which the type and size columns fold away (narrow window or open preview). */
 const COMPACT_WIDTH = 600;
 
+/**
+ * Toggles `compact` outside the ResizeObserver callback: changing layout inside it makes the browser
+ * report "ResizeObserver loop completed with undelivered notifications". Skips unchanged values.
+ */
+export function deferredCompact(
+  el: Pick<HTMLElement, 'classList'>,
+  width: () => number,
+  raf: (cb: () => void) => number,
+  caf: (id: number) => void,
+): { schedule(): void; cancel(): void } {
+  let pending: number | null = null;
+  return {
+    schedule() {
+      if (pending !== null) return;
+      pending = raf(() => {
+        pending = null;
+        const compact = width() < COMPACT_WIDTH;
+        if (el.classList.contains('compact') !== compact) el.classList.toggle('compact', compact);
+      });
+    },
+    cancel() {
+      if (pending !== null) caf(pending);
+      pending = null;
+    },
+  };
+}
+
 export function createList(actions: Actions): List {
   const selectAll = h('input', { type: 'checkbox', 'aria-label': t('list.selectAll') }) as HTMLInputElement;
   selectAll.addEventListener('change', () => actions.setAllSelected(selectAll.checked));
@@ -58,9 +85,13 @@ export function createList(actions: Actions): List {
 
   // Everything global this list installs is torn down by `destroy()` (on re-mount).
   const lifetime = new AbortController();
-  const resize = new ResizeObserver(() => el.classList.toggle('compact', el.clientWidth < COMPACT_WIDTH));
+  const applyCompact = deferredCompact(el, () => el.clientWidth, requestAnimationFrame, cancelAnimationFrame);
+  const resize = new ResizeObserver(applyCompact.schedule);
   resize.observe(el);
-  lifetime.signal.addEventListener('abort', () => resize.disconnect());
+  lifetime.signal.addEventListener('abort', () => {
+    resize.disconnect();
+    applyCompact.cancel();
+  });
 
   const rows = new Map<string, Row>();
   let current: View | null = null;
