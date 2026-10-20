@@ -112,6 +112,13 @@ const ru: Messages = {
   'kind.image': 'Изображение',
   'kind.audio': 'Аудио',
   'kind.unknown': 'Неизвестно',
+  'kind.zip': 'ZIP',
+  'zip.summary': 'Преобразовано файлов: {n}, пропущено: {m}',
+  'zip.summaryAll': 'Преобразовано файлов: {n}',
+  'settings.zipOutput': 'ZIP-файлы',
+  'settings.zipFolder': 'Папка с той же структурой',
+  'settings.zipSingle': 'Один общий файл Markdown',
+  'settings.zipZip': 'ZIP с файлами Markdown',
 };
 
 export default ru;

@@ -3,6 +3,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import DOMPurify from 'dompurify';
 import { type OutputText, openOutput, readOutput, trimMemory } from '../api';
 import { getLang, t } from '../i18n';
+import { previewable } from '../queue';
 import { fileName, formatBytes } from '../platform';
 import type { Actions, View } from './context';
 import { h, icons, setText, svg } from './dom';
@@ -186,7 +187,7 @@ export function createPreview(actions: Actions): Preview {
     el,
     update(view) {
       const item = view.preview ? view.queue.items.find((i) => i.path === view.preview) : undefined;
-      const nextOutput = item?.status === 'done' && item.output ? item.output : null;
+      const nextOutput = item && previewable(item) ? (item.output ?? null) : null;
       el.hidden = nextOutput === null;
       if (nextOutput === null) {
         const wasOpen = output !== null;

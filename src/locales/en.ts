@@ -111,6 +111,13 @@ export const en = {
   'kind.image': 'Image',
   'kind.audio': 'Audio',
   'kind.unknown': 'Unknown',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} files converted, {m} skipped',
+  'zip.summaryAll': '{n} files converted',
+  'settings.zipOutput': 'ZIP files',
+  'settings.zipFolder': 'A folder with the same structure',
+  'settings.zipSingle': 'One combined Markdown file',
+  'settings.zipZip': 'A ZIP of the Markdown files',
 } as const;
 
 export type MessageKey = keyof typeof en;

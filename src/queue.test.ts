@@ -13,6 +13,7 @@ import {
   selectionState,
   setAllSelected,
   setFilter,
+  previewable,
   setSelected,
   visibleItems,
 } from './queue';
@@ -106,5 +107,31 @@ describe('queue', () => {
     s = setSelected(beginBatch(setAllSelected(s, true), ['/a.pdf']), '/a.pdf', true);
     s = applyEvent(s, { event: 'fileStarted', data: { path: '/a.pdf' } });
     expect(removablePaths(s)).toEqual(['/b.pdf']);
+  });
+});
+
+describe('zip rows', () => {
+  const zipEntry: FileEntry = { path: '/p.zip', name: 'p.zip', kind: 'zip', size: 10, supported: true };
+
+  it('keeps the zip result and previews only the combined file', () => {
+    for (const [mode, preview] of [['single', true], ['folder', false], ['zip', false]] as const) {
+      let s = beginBatch(addEntries(emptyQueue(), [zipEntry]), ['/p.zip']);
+      s = applyEvent(s, {
+        event: 'fileFinished',
+        data: { path: '/p.zip', output: '/out/p', warnings: [], zip: { mode, converted: 3, skipped: 1 } },
+      });
+      expect(s.items[0]).toMatchObject({ status: 'done', zip: { mode, converted: 3, skipped: 1 } });
+      expect(previewable(s.items[0]!)).toBe(preview);
+      // Converting again forgets the old result.
+      expect(beginBatch(s, ['/p.zip']).items[0]!.zip).toBeUndefined();
+    }
+  });
+
+  it('previews ordinary files and never unfinished ones', () => {
+    let s = beginBatch(addEntries(emptyQueue(), [entry('/a.pdf')]), ['/a.pdf']);
+    expect(previewable(s.items[0]!)).toBe(false);
+    s = applyEvent(s, { event: 'fileFinished', data: { path: '/a.pdf', output: '/out/a.md', warnings: [], zip: null } });
+    expect(previewable(s.items[0]!)).toBe(true);
+    expect(s.items[0]!.zip).toBeUndefined();
   });
 });

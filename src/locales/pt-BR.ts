@@ -112,6 +112,13 @@ const ptBR: Messages = {
   'kind.image': 'Imagem',
   'kind.audio': 'Áudio',
   'kind.unknown': 'Desconhecido',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} arquivos convertidos, {m} ignorados',
+  'zip.summaryAll': '{n} arquivos convertidos',
+  'settings.zipOutput': 'Arquivos ZIP',
+  'settings.zipFolder': 'Uma pasta com a mesma estrutura',
+  'settings.zipSingle': 'Um único arquivo Markdown combinado',
+  'settings.zipZip': 'Um ZIP com os arquivos Markdown',
 };
 
 export default ptBR;

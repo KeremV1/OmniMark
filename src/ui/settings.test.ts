@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { OcrStatus } from '../api';
-import { loadLang } from '../i18n';
-import { formatMegabytes, ocrStatusLines, setDialogError } from './settings';
+import { loadLang, t, zipSummaryLabel } from '../i18n';
+import { formatMegabytes, ocrStatusLines, setDialogError, ZIP_OUTPUTS } from './settings';
 
 describe('settings dialog error line', () => {
   it('shows the message inside the dialog and hides it again on success', () => {
@@ -35,5 +35,27 @@ describe('OCR settings', () => {
     await loadLang('tr');
     expect(ocrStatusLines(windows)).toEqual(['Windows OCR kullanılacak (hazır).']);
     expect(ocrStatusLines({ ...windows, engine: 'ocrs' })).toHaveLength(2);
+  });
+});
+
+describe('ZIP settings', () => {
+  it('offers the three modes in display order, each with a label', async () => {
+    expect(ZIP_OUTPUTS.map(([mode]) => mode)).toEqual(['folder', 'single', 'zip']);
+    await loadLang('en');
+    expect(ZIP_OUTPUTS.map(([, key]) => t(key))).toEqual([
+      'A folder with the same structure',
+      'One combined Markdown file',
+      'A ZIP of the Markdown files',
+    ]);
+  });
+
+  it('summarizes a finished zip per language', async () => {
+    await loadLang('en');
+    expect(zipSummaryLabel(12, 2)).toBe('12 files converted, 2 skipped');
+    expect(zipSummaryLabel(5, 0)).toBe('5 files converted');
+    await loadLang('tr');
+    expect(zipSummaryLabel(12, 2)).toBe('12 dosya dönüştürüldü, 2 atlandı');
+    await loadLang('ru');
+    expect(zipSummaryLabel(12, 2)).toBe('Преобразовано файлов: 12, пропущено: 2');
   });
 });

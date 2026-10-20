@@ -112,6 +112,13 @@ const fr: Messages = {
   'kind.image': 'Image',
   'kind.audio': 'Audio',
   'kind.unknown': 'Inconnu',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} fichiers convertis, {m} ignorés',
+  'zip.summaryAll': '{n} fichiers convertis',
+  'settings.zipOutput': 'Fichiers ZIP',
+  'settings.zipFolder': 'Un dossier de même structure',
+  'settings.zipSingle': 'Un seul fichier Markdown combiné',
+  'settings.zipZip': 'Un ZIP des fichiers Markdown',
 };
 
 export default fr;

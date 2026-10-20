@@ -45,6 +45,7 @@ const FALLBACK_SETTINGS: Settings = {
   workers: 2,
   language: 'auto',
   ocr: { enabled: false },
+  zipOutput: 'folder',
 };
 
 let view: View = {

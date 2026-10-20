@@ -112,6 +112,13 @@ const tr: Messages = {
   'kind.image': 'Görsel',
   'kind.audio': 'Ses',
   'kind.unknown': 'Bilinmiyor',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} dosya dönüştürüldü, {m} atlandı',
+  'zip.summaryAll': '{n} dosya dönüştürüldü',
+  'settings.zipOutput': 'ZIP dosyaları',
+  'settings.zipFolder': 'Aynı yapıda bir klasör',
+  'settings.zipSingle': 'Tek birleşik Markdown dosyası',
+  'settings.zipZip': 'Markdown dosyalarının ZIP\'i',
 };
 
 export default tr;

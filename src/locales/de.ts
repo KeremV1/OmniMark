@@ -112,6 +112,13 @@ const de: Messages = {
   'kind.image': 'Bild',
   'kind.audio': 'Audio',
   'kind.unknown': 'Unbekannt',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} Dateien umgewandelt, {m} übersprungen',
+  'zip.summaryAll': '{n} Dateien umgewandelt',
+  'settings.zipOutput': 'ZIP-Dateien',
+  'settings.zipFolder': 'Ein Ordner mit gleicher Struktur',
+  'settings.zipSingle': 'Eine gemeinsame Markdown-Datei',
+  'settings.zipZip': 'Eine ZIP-Datei mit den Markdown-Dateien',
 };
 
 export default de;
