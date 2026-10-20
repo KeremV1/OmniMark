@@ -33,6 +33,11 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 
 | Fixture | markitdown-ocr beklentisi | OmniMark beklentisi | Gerekçe |
 | --- | --- | --- | --- |
+| pdf_image_*, pdf_multipage | Blok çevresinde 3-4 boş satır (ham çıktı) | Tek boş satır | Son normalizasyon |
+| pdf_complex_layout | `ItemQuantity` (kelimeler yapışık) | `Item Quantity` | pdfium kelime boşluklarını korur |
+| (OCR açık, tüm PDF'ler) | Yerleşik tablo/form ve başlık mantığı kaybolur | Korunur; bloklar satırlar arasına yerleşir | spec §3.1; markitdown §13 madde 2 |
+| pdf_scanned_*, MEDRPT… | Gömülü raster görsel OCR'lanır; görselsiz "tarama" okunmaz | Metin katmanı olmayan sayfa 300 DPI (uzun kenar ≤ 4096) çizilip OCR'lanır | Her taranmış sayfa okunur |
+| (OCR kapalı) | — | Uyarı: `Page N has no text layer (scanned?); enable OCR to read it.` | OCR artık var |
 
 ### Office OCR (M2-5)
 

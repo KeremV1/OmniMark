@@ -3,16 +3,20 @@
 pub(crate) mod form;
 pub(crate) mod layout;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use pdfium_render::prelude::*;
 
 use crate::error::{ConvertError, Result};
+use crate::ocr::{
+    block_plain, from_dynamic, DocumentOcr, OcrImage, DECODE_WARNING, MAX_DECODE_ALLOC,
+    MAX_INPUT_DIMENSION, MAX_OCR_SIDE, NO_PAGE_TEXT,
+};
 use crate::registry::{ConvertContext, Converter};
 use crate::{Document, FileInfo, Input};
 
-use layout::{Glyph, Word};
+use layout::{Glyph, PlacedBlock, Word};
 
 /// File name of the pdfium shared library on this platform.
 pub fn pdfium_library_file_name() -> &'static str {
@@ -28,6 +32,10 @@ pub fn pdfium_library_file_name() -> &'static str {
 /// Weight at or above which a glyph counts as bold.
 const BOLD_WEIGHT: u32 = 600;
 const BOLD_FONT_NAMES: [&str; 5] = ["Bold", "Black", "Heavy", "-Medi", "Semibold"];
+/// Resolution a page without a text layer is rendered at for OCR.
+const SCAN_DPI: f32 = 300.0;
+/// A round ends once this many bytes of pixels wait for OCR.
+const OCR_ROUND_BYTES: usize = 128 * 1024 * 1024;
 
 /// The bound pdfium, shared by all conversions (one lock serialises PDF work). Only a
 /// successful bind is cached, so a missing or half-downloaded library can be retried later.
@@ -44,11 +52,54 @@ impl PdfConverter {
     }
 }
 
-struct PageData {
+#[cfg(test)]
+thread_local! {
+    /// True while this thread holds `PDFIUM` (tests check OCR never runs under it).
+    static HOLDS_PDFIUM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+struct HeldFlag;
+#[cfg(test)]
+impl HeldFlag {
+    fn set() -> Self {
+        HOLDS_PDFIUM.with(|h| h.set(true));
+        Self
+    }
+}
+#[cfg(test)]
+impl Drop for HeldFlag {
+    fn drop(&mut self) {
+        HOLDS_PDFIUM.with(|h| h.set(false));
+    }
+}
+
+/// One page as read under the lock; images are freed once OCR'd.
+struct RawPage {
     words: Vec<Word>,
     /// Blank-preserving words for form detection.
     phrases: Vec<Word>,
     width: f32,
+    images: Vec<(f32, OcrImage)>,
+    scan: Option<OcrImage>,
+}
+
+struct PageData {
+    words: Vec<Word>,
+    phrases: Vec<Word>,
+    width: f32,
+    blocks: Vec<PlacedBlock>,
+    /// `Some` for a page without a text layer when OCR is on: its recognized text, if any.
+    scanned: Option<Option<String>>,
+}
+
+struct Round {
+    pages: Vec<RawPage>,
+    page_count: usize,
+}
+
+pub(crate) fn no_text_layer_warning(page: usize) -> String {
+    format!("Page {page} has no text layer (scanned?); enable OCR to read it.")
 }
 
 impl Converter for PdfConverter {
@@ -67,52 +118,193 @@ impl Converter for PdfConverter {
             Some(path) => return Err(missing_library(&path.display().to_string())),
             None => return Err(missing_library("(no path configured)")),
         };
-        let mut guard = PDFIUM.lock().unwrap_or_else(|e| e.into_inner());
-        if guard.is_none() {
-            let bindings = Pdfium::bind_to_library(library).map_err(|e| {
-                ConvertError::MissingComponent(format!("{}: {e}", library.display()))
-            })?;
-            *guard = Some(Pdfium::new(bindings));
-        }
-        let pdfium = guard.as_ref().expect("pdfium bound above");
-
-        let document = match pdfium.load_pdf_from_byte_slice(&input.bytes, None) {
-            Ok(document) => document,
-            Err(PdfiumError::PdfiumLibraryInternalError(PdfiumInternalError::PasswordError)) => {
-                return Err(ConvertError::Encrypted)
-            }
-            Err(e) => return Err(ConvertError::corrupt(format!("{e:?}"))),
-        };
-
+        let mut ocr = DocumentOcr::new(ctx.options);
         let mut result = Document::default();
-        let pages = document.pages();
-        let page_count = pages.len() as usize;
-        let mut page_data = Vec::with_capacity(page_count);
-        for (i, page) in pages.iter().enumerate() {
-            ctx.check_cancel()?;
-            let glyphs = page_glyphs(&page)?;
-            let words = layout::group_words(&glyphs);
-            if words.is_empty() {
-                result.warn(format!(
-                    "Page {} has no text layer (scanned?); OCR is planned for a later version.",
-                    i + 1
-                ));
+        let mut pages: Vec<PageData> = Vec::new();
+        loop {
+            let round = extract_round(
+                library,
+                &input.bytes,
+                pages.len(),
+                ocr.is_some(),
+                ctx,
+                &mut result,
+            )?;
+            let read = round.pages.len();
+            for raw in round.pages {
+                pages.push(finish_page(raw, ocr.as_mut(), ctx, &mut result)?);
+                if ocr.is_some() {
+                    ctx.report(pages.len() as f32 / round.page_count.max(1) as f32);
+                }
             }
-            page_data.push(PageData {
-                phrases: layout::group_phrases(&glyphs),
-                words,
-                width: page.width().value,
-            });
-            ctx.report((i + 1) as f32 / page_count as f32);
+            if read == 0 || pages.len() >= round.page_count {
+                break;
+            }
         }
-
-        result.markdown = render_pages(&page_data);
+        result.markdown = render_pages(&pages, ocr.is_some());
         Ok(result)
     }
 }
 
 fn missing_library(path: &str) -> ConvertError {
     ConvertError::MissingComponent(format!("pdfium library not found at {path}"))
+}
+
+/// Reads pages from `start` under the pdfium lock until the end or until the pixels waiting
+/// for OCR reach [`OCR_ROUND_BYTES`]; the lock and the document are released on return.
+fn extract_round(
+    library: &Path,
+    bytes: &[u8],
+    start: usize,
+    ocr_on: bool,
+    ctx: &ConvertContext<'_>,
+    result: &mut Document,
+) -> Result<Round> {
+    let mut guard = PDFIUM.lock().unwrap_or_else(|e| e.into_inner());
+    #[cfg(test)]
+    let _held = HeldFlag::set();
+    if guard.is_none() {
+        let bindings = Pdfium::bind_to_library(library)
+            .map_err(|e| ConvertError::MissingComponent(format!("{}: {e}", library.display())))?;
+        *guard = Some(Pdfium::new(bindings));
+    }
+    let pdfium = guard.as_ref().expect("pdfium bound above");
+
+    let document = match pdfium.load_pdf_from_byte_slice(bytes, None) {
+        Ok(document) => document,
+        Err(PdfiumError::PdfiumLibraryInternalError(PdfiumInternalError::PasswordError)) => {
+            return Err(ConvertError::Encrypted)
+        }
+        Err(e) => return Err(ConvertError::corrupt(format!("{e:?}"))),
+    };
+
+    let pages = document.pages();
+    let page_count = pages.len() as usize;
+    let mut taken = Vec::new();
+    let mut pending = 0usize;
+    for (i, page) in pages.iter().enumerate().skip(start) {
+        ctx.check_cancel()?;
+        let glyphs = page_glyphs(&page)?;
+        let words = layout::group_words(&glyphs);
+        let mut images = Vec::new();
+        let mut scan = None;
+        if words.is_empty() {
+            if ocr_on {
+                scan = render_scan(&page, result);
+            } else {
+                result.warn(no_text_layer_warning(i + 1));
+            }
+        } else if ocr_on {
+            images = page_images(&page, result);
+        }
+        pending += images.iter().map(|(_, im)| im.rgba().len()).sum::<usize>()
+            + scan.as_ref().map_or(0, |im| im.rgba().len());
+        taken.push(RawPage {
+            phrases: layout::group_phrases(&glyphs),
+            words,
+            width: page.width().value,
+            images,
+            scan,
+        });
+        if !ocr_on {
+            ctx.report((i + 1) as f32 / page_count as f32);
+        } else if pending >= OCR_ROUND_BYTES {
+            break;
+        }
+    }
+    Ok(Round {
+        pages: taken,
+        page_count,
+    })
+}
+
+/// Top-level image objects of a page as OCR input with their top edge (top-left origin).
+fn page_images(page: &PdfPage<'_>, result: &mut Document) -> Vec<(f32, OcrImage)> {
+    let page_height = page.height().value;
+    let mut images = Vec::new();
+    for object in page.objects().iter() {
+        let Some(image) = object.as_image_object() else {
+            continue;
+        };
+        let (Ok(w), Ok(h)) = (image.width(), image.height()) else {
+            result.warn_once(DECODE_WARNING);
+            continue;
+        };
+        let too_big = w <= 0
+            || h <= 0
+            || w as u32 > MAX_INPUT_DIMENSION
+            || h as u32 > MAX_INPUT_DIMENSION
+            || (w as u64) * (h as u64) * 4 > MAX_DECODE_ALLOC;
+        if too_big {
+            result.warn_once(DECODE_WARNING);
+            continue;
+        }
+        let Ok(bounds) = object.bounds() else {
+            continue;
+        };
+        match image.get_raw_image() {
+            Ok(decoded) => {
+                if let Some(prepared) = from_dynamic(decoded) {
+                    images.push((page_height - bounds.top().value, prepared));
+                }
+            }
+            Err(_) => result.warn_once(DECODE_WARNING),
+        }
+    }
+    images.sort_by(|a, b| a.0.total_cmp(&b.0));
+    images
+}
+
+/// Draws a page without a text layer for OCR (300 DPI, long side at most 4096 px).
+fn render_scan(page: &PdfPage<'_>, result: &mut Document) -> Option<OcrImage> {
+    let (width, height) = (page.width().value, page.height().value);
+    let scale = (SCAN_DPI / 72.0).min(MAX_OCR_SIDE as f32 / width.max(height).max(1.0));
+    let config =
+        PdfRenderConfig::new().set_target_width((width * scale).round().max(1.0) as Pixels);
+    match page
+        .render_with_config(&config)
+        .and_then(|bitmap| bitmap.as_image())
+    {
+        Ok(image) => from_dynamic(image),
+        Err(_) => {
+            result.warn_once("A scanned page could not be rendered for OCR.");
+            None
+        }
+    }
+}
+
+/// Recognizes the images of one page outside the pdfium lock and frees them.
+fn finish_page(
+    raw: RawPage,
+    ocr: Option<&mut DocumentOcr>,
+    ctx: &ConvertContext<'_>,
+    result: &mut Document,
+) -> Result<PageData> {
+    let mut blocks = Vec::new();
+    let mut scanned = None;
+    if let Some(ocr) = ocr {
+        for (top, image) in &raw.images {
+            if let Some(text) = ocr.image(image, ctx.cancel, result)? {
+                blocks.push(PlacedBlock {
+                    top: *top,
+                    markdown: block_plain(&text),
+                });
+            }
+        }
+        if raw.words.is_empty() {
+            scanned = Some(match &raw.scan {
+                Some(image) => ocr.image(image, ctx.cancel, result)?,
+                None => None,
+            });
+        }
+    }
+    Ok(PageData {
+        words: raw.words,
+        phrases: raw.phrases,
+        width: raw.width,
+        blocks,
+        scanned,
+    })
 }
 
 /// Characters of a page with top-left-origin boxes. Characters without bounds are skipped.
@@ -161,7 +353,7 @@ fn weight_value(weight: PdfFontWeight) -> u32 {
 }
 
 /// Turns the extracted words of all pages into the document Markdown.
-fn render_pages(pages: &[PageData]) -> String {
+fn render_pages(pages: &[PageData], ocr_on: bool) -> String {
     let all_words: Vec<Word> = pages.iter().flat_map(|p| p.words.iter().cloned()).collect();
     let body = layout::body_size(&all_words);
 
@@ -177,14 +369,45 @@ fn render_pages(pages: &[PageData]) -> String {
         .collect();
     let heading_sizes = layout::finalize_heading_sizes(heading_candidates);
 
+    if !ocr_on {
+        let chunks: Vec<String> = pages
+            .iter()
+            .zip(forms)
+            .map(|(page, form)| match form {
+                Some(content) => content,
+                None => layout::render_text_page(&page.words, body, &heading_sizes, &[]),
+            })
+            .filter(|chunk| !chunk.trim().is_empty())
+            .collect();
+        return layout::merge_partial_numbering(&chunks.join("\n\n"));
+    }
     let chunks: Vec<String> = pages
         .iter()
         .zip(forms)
-        .map(|(page, form)| match form {
-            Some(content) => content,
-            None => layout::render_text_page(&page.words, body, &heading_sizes),
+        .enumerate()
+        .map(|(i, (page, form))| {
+            let content = match (&page.scanned, form) {
+                (Some(text), _) => text
+                    .as_deref()
+                    .map(block_plain)
+                    .unwrap_or_else(|| NO_PAGE_TEXT.to_string()),
+                (None, Some(mut form)) => {
+                    for block in &page.blocks {
+                        form.push_str("\n\n");
+                        form.push_str(&block.markdown);
+                    }
+                    form
+                }
+                (None, None) => {
+                    layout::render_text_page(&page.words, body, &heading_sizes, &page.blocks)
+                }
+            };
+            if content.is_empty() {
+                format!("## Page {}", i + 1)
+            } else {
+                format!("## Page {}\n\n{content}", i + 1)
+            }
         })
-        .filter(|chunk| !chunk.trim().is_empty())
         .collect();
     layout::merge_partial_numbering(&chunks.join("\n\n"))
 }
@@ -324,7 +547,7 @@ mod tests {
         assert!(!doc.warnings.is_empty());
         assert_eq!(
             doc.warnings[0],
-            "Page 1 has no text layer (scanned?); OCR is planned for a later version."
+            "Page 1 has no text layer (scanned?); enable OCR to read it."
         );
     }
 
@@ -354,6 +577,98 @@ mod tests {
         assert!(
             found.contains(&"RECEIPT-2024-TXN-98765_retail_purchase.pdf"),
             "{found:?}"
+        );
+    }
+
+    use crate::ocr::{MockEngine, OcrEngine, OcrError, OcrLanguage};
+    use std::sync::Arc;
+
+    fn run_with(converter: &PdfConverter, path: &Path, engine: Arc<dyn OcrEngine>) -> Document {
+        let input = Input {
+            path: path.to_path_buf(),
+            bytes: std::fs::read(path).unwrap(),
+        };
+        let options = ConvertOptions {
+            ocr: Some(engine),
+            ..ConvertOptions::default()
+        };
+        let mut sink = NullAssetSink;
+        let cancel = CancelToken::new();
+        let progress = |_: f32| {};
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut sink,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        converter.convert(&input, &mut ctx).unwrap()
+    }
+
+    fn ocr_fixture(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/markitdown/ocr")
+            .join(name)
+    }
+
+    /// Fails the test if recognition runs while this thread holds the pdfium lock.
+    struct LockProbe;
+    impl OcrEngine for LockProbe {
+        fn name(&self) -> &'static str {
+            "probe"
+        }
+        fn recognize(
+            &self,
+            _: &OcrImage,
+            _: &OcrLanguage,
+        ) -> std::result::Result<String, OcrError> {
+            assert!(
+                !HOLDS_PDFIUM.with(|held| held.get()),
+                "OCR ran under the pdfium lock"
+            );
+            Ok("probe".into())
+        }
+    }
+
+    #[test]
+    fn scanned_page_is_rendered_and_recognized_outside_the_lock() {
+        let Some(library) = real_library() else {
+            return;
+        };
+        let converter = PdfConverter::new(Some(library));
+        let engine = Arc::new(MockEngine::default());
+        let doc = run_with(
+            &converter,
+            &ocr_fixture("pdf_scanned_minimal.pdf"),
+            engine.clone(),
+        );
+        assert_eq!(
+            doc.markdown,
+            "## Page 1\n\n*[Image OCR]\nMOCK_OCR_TEXT_12345\n[End OCR]*"
+        );
+        assert!(doc.warnings.is_empty(), "{:?}", doc.warnings);
+        assert_eq!(engine.calls(), 1);
+        let probed = run_with(
+            &converter,
+            &ocr_fixture("pdf_image_middle.pdf"),
+            Arc::new(LockProbe),
+        );
+        assert!(probed.markdown.contains("*[Image OCR]\nprobe\n[End OCR]*"));
+    }
+
+    #[test]
+    fn empty_ocr_on_a_scanned_page_says_so() {
+        let Some(library) = real_library() else {
+            return;
+        };
+        let converter = PdfConverter::new(Some(library));
+        let doc = run_with(
+            &converter,
+            &ocr_fixture("pdf_scanned_minimal.pdf"),
+            Arc::new(MockEngine::new("  ")),
+        );
+        assert_eq!(
+            doc.markdown,
+            "## Page 1\n\n*[No text could be extracted from this page]*"
         );
     }
 }
