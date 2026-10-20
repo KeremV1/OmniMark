@@ -32,9 +32,10 @@ pub use choice::{
 pub use decode::{
     decode, from_dynamic, MAX_DECODE_ALLOC, MAX_INPUT_DIMENSION, MAX_OCR_SIDE, MIN_OCR_SIDE,
 };
-pub use doc::{clean_text, DocumentOcr, DECODE_WARNING};
+pub use doc::{clean_text, DocumentOcr, DECODE_WARNING, MAX_OCR_IMAGES, OCR_LIMIT_WARNING};
 pub use mock::{MockEngine, MOCK_TEXT};
 
+use crate::cancel::CancelToken;
 use serde::{Deserialize, Serialize};
 
 /// A text recognizer. Created once per batch and shared by the worker threads.
@@ -44,6 +45,18 @@ pub trait OcrEngine: Send + Sync {
 
     /// Text of one prepared image, lines separated by `\n`.
     fn recognize(&self, image: &OcrImage, language: &OcrLanguage) -> Result<String, OcrError>;
+
+    /// Like [`recognize`](Self::recognize), but engines that run long external work (Tesseract)
+    /// stop early with [`OcrError::Cancelled`] once `cancel` fires. In-process engines finish
+    /// the single image: [`DocumentOcr`] checks the token before the next one.
+    fn recognize_cancellable(
+        &self,
+        image: &OcrImage,
+        language: &OcrLanguage,
+        _cancel: &CancelToken,
+    ) -> Result<String, OcrError> {
+        self.recognize(image, language)
+    }
 }
 
 /// Recognition language.
@@ -76,6 +89,8 @@ pub enum OcrError {
     Image(String),
     #[error("OCR failed: {0}")]
     Engine(String),
+    #[error("OCR was cancelled")]
+    Cancelled,
 }
 
 /// An RGBA image prepared for OCR: decoded within the limits and scaled (see [`decode`]).

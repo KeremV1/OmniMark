@@ -243,10 +243,12 @@ fn store_sheet_images(
             Some(ocr) => ocr.image_bytes(&data, ctx.cancel, notes)?,
             None => None,
         };
-        lines.push(match text {
-            Some(text) => format!("{md}\n\n{}\n", block_markdown(&text)),
-            None => md,
-        });
+        match text {
+            Some(text) => lines.push(format!("{md}\n\n{}\n", block_markdown(&text))),
+            // Extraction off and nothing recognized: an empty `![alt]()` would say nothing.
+            None if !ctx.options.extract_images => {}
+            None => lines.push(md),
+        }
     }
     Ok(lines)
 }
@@ -657,5 +659,35 @@ mod tests {
             .unwrap();
         assert_eq!(doc.markdown.matches("MOCK\\_OCR\\_TEXT\\_12345").count(), 2);
         assert!(doc.markdown.contains("]()\n\n*[Image OCR]\\\n"));
+    }
+
+    #[test]
+    fn image_without_text_or_link_emits_no_empty_image_line() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/markitdown/ocr/xlsx_image_middle.xlsx");
+        let options = crate::ConvertOptions {
+            extract_images: false,
+            ocr: Some(std::sync::Arc::new(crate::ocr::MockEngine::new(""))),
+            ..crate::ConvertOptions::default()
+        };
+        let mut sink = crate::assets::NullAssetSink;
+        let cancel = crate::CancelToken::new();
+        let progress = |_: f32| {};
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut sink,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        let doc = XlsxConverter
+            .convert(
+                &Input {
+                    path: path.clone(),
+                    bytes: std::fs::read(&path).unwrap(),
+                },
+                &mut ctx,
+            )
+            .unwrap();
+        assert!(!doc.markdown.contains("]()"), "{}", doc.markdown);
     }
 }

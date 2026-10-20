@@ -154,6 +154,7 @@ pub(crate) fn extract_form_content(words: &[Word], page_width: f32) -> Option<St
 
     // Format: runs of table rows become tables, the rest stays plain lines.
     let mut out: Vec<String> = Vec::new();
+    let mut accepted_table = false;
     let mut i = 0;
     while i < lines.len() {
         if !is_table[i] {
@@ -170,6 +171,7 @@ pub(crate) fn extract_form_content(words: &[Word], page_width: f32) -> Option<St
             i = j;
             continue;
         }
+        accepted_table = true;
         if out.last().is_some_and(|l| !l.is_empty()) {
             out.push(String::new());
         }
@@ -179,7 +181,9 @@ pub(crate) fn extract_form_content(words: &[Word], page_width: f32) -> Option<St
         }
         i = j;
     }
-    Some(out.join("\n"))
+    // No run survived the filter: the page is not a form, so the normal layout path
+    // (headings, paragraphs, OCR block placement) handles it.
+    accepted_table.then(|| out.join("\n"))
 }
 
 /// Run-level sanity filter (deviation from MarkItDown, see `min_run_fill`/`min_run_rows`).
@@ -435,6 +439,18 @@ s2a s2b"
             1,
             "{md}"
         );
+    }
+
+    #[test]
+    fn page_whose_runs_are_all_rejected_is_not_a_form() {
+        // Three full rows, but every gap is only 3x the font size: justified text.
+        let mut words = Vec::new();
+        for top in [100.0, 115.0, 130.0] {
+            for (col, x) in [40.0, 100.0, 160.0].iter().enumerate() {
+                words.push(w(&format!("p{col}"), *x, top));
+            }
+        }
+        assert_eq!(extract_form_content(&words, 612.0), None);
     }
 
     #[test]
