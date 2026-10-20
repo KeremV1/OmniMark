@@ -12,14 +12,14 @@
 //! - a nested `.zip` is not opened (depth 1) and is reported;
 //! - names with `..`, an absolute path or a drive letter are rejected and reported;
 //! - folder entries are ignored, encrypted entries are skipped and reported;
-//! - limits: at most [`archive::MAX_ENTRIES`] entries, [`MAX_ENTRY_SIZE`] per entry and
-//!   [`archive::MAX_TOTAL_UNCOMPRESSED`] in total; going over the total stops the walk.
+//! - limits: at most [`crate::archive::MAX_ENTRIES`] entries, [`MAX_ENTRY_SIZE`] per entry and
+//!   [`crate::archive::MAX_TOTAL_UNCOMPRESSED`] in total; going over the total stops the walk.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::archive::{self, Archive};
+use crate::archive::Archive;
 use crate::assets::{AssetSink, MemoryAssetSink, NullAssetSink};
 use crate::detect;
 use crate::document::Document;
@@ -728,7 +728,7 @@ ImageSize: 1615x1967"
 
     #[test]
     fn too_many_entries_is_corrupt() {
-        let names: Vec<String> = (0..archive::MAX_ENTRIES + 1)
+        let names: Vec<String> = (0..crate::archive::MAX_ENTRIES + 1)
             .map(|i| format!("{i}.txt"))
             .collect();
         let entries: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), &b""[..])).collect();
