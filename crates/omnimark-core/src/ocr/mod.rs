@@ -13,6 +13,8 @@ mod mock;
 pub mod models;
 #[cfg(feature = "ocr")]
 pub mod ocrs_engine;
+#[cfg(test)]
+mod quality;
 pub mod tesseract_engine;
 #[cfg(test)]
 pub(crate) mod test_render;
