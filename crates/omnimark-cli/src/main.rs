@@ -3,9 +3,14 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use omnimark_core::assets::{AssetSink, DirAssetSink, NullAssetSink};
 use omnimark_core::formats::{default_registry, pdfium_library_file_name, RegistryConfig};
+use omnimark_core::ocr::models::{
+    default_models_root, fetch_ocrs, ocrs_dir, ocrs_status, resolve_models_root, DownloadProgress,
+    MODELS_ENV,
+};
+use omnimark_core::ocr::{build_engine, tesseract_engine, EngineConfig, OcrChoice, OcrLanguage};
 use omnimark_core::output::{write_atomic, OutputAllocator};
 use omnimark_core::{convert_isolated, CancelToken, ConvertContext, ConvertOptions};
 
@@ -20,6 +25,73 @@ struct Cli {
 enum Command {
     /// Convert one or more files.
     Convert(ConvertArgs),
+    /// List or download the optional OCR models.
+    #[command(subcommand)]
+    Models(ModelsCommand),
+}
+
+#[derive(Args)]
+struct ModelsDir {
+    /// Models folder [default: OMNIMARK_MODELS_DIR, then the local data folder].
+    #[arg(long)]
+    models_dir: Option<PathBuf>,
+    /// The tesseract program [default: OMNIMARK_TESSERACT, PATH, then the usual install folders].
+    #[arg(long)]
+    tesseract_path: Option<PathBuf>,
+}
+
+#[derive(Subcommand)]
+enum ModelsCommand {
+    /// Show which model files are present.
+    List(ModelsDir),
+    /// Download a model (checked with SHA-256).
+    Fetch {
+        #[arg(value_enum)]
+        model: ModelName,
+        #[command(flatten)]
+        dir: ModelsDir,
+    },
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum ModelName {
+    Ocrs,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum OcrArg {
+    Auto,
+    Windows,
+    Tesseract,
+    Ocrs,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum LangArg {
+    Auto,
+    Tr,
+    En,
+}
+
+impl From<OcrArg> for OcrChoice {
+    fn from(arg: OcrArg) -> Self {
+        match arg {
+            OcrArg::Auto => Self::Auto,
+            OcrArg::Windows => Self::Windows,
+            OcrArg::Tesseract => Self::Tesseract,
+            OcrArg::Ocrs => Self::Ocrs,
+        }
+    }
+}
+
+impl From<LangArg> for OcrLanguage {
+    fn from(arg: LangArg) -> Self {
+        match arg {
+            LangArg::Auto => Self::Auto,
+            LangArg::Tr => Self::Tr,
+            LangArg::En => Self::En,
+        }
+    }
 }
 
 #[derive(Args)]
@@ -39,10 +111,102 @@ struct ConvertArgs {
     /// next to the executable].
     #[arg(long, env = "OMNIMARK_PDFIUM_PATH")]
     pdfium: Option<PathBuf>,
+    /// Read text in images: `--ocr` (auto), `--ocr=windows`, `--ocr=tesseract` or `--ocr=ocrs`. Off by default.
+    #[arg(
+        long,
+        value_enum,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "auto"
+    )]
+    ocr: Option<OcrArg>,
+    /// OCR language.
+    #[arg(long, value_enum, default_value = "auto")]
+    ocr_lang: LangArg,
+    #[command(flatten)]
+    models: ModelsDir,
 }
 
 fn main() -> ExitCode {
-    let Command::Convert(args) = Cli::parse().command;
+    match Cli::parse().command {
+        Command::Convert(args) => convert(args),
+        Command::Models(command) => models(command),
+    }
+}
+
+fn models_root(dir: &ModelsDir) -> Option<PathBuf> {
+    resolve_models_root(
+        dir.models_dir.clone(),
+        std::env::var_os(MODELS_ENV),
+        default_models_root(),
+    )
+}
+
+fn engine_config(dir: &ModelsDir) -> EngineConfig {
+    EngineConfig {
+        models_root: models_root(dir),
+        tesseract_path: dir.tesseract_path.clone(),
+    }
+}
+
+fn models(command: ModelsCommand) -> ExitCode {
+    let (dir, fetch) = match &command {
+        ModelsCommand::List(dir) => (dir, false),
+        ModelsCommand::Fetch {
+            model: ModelName::Ocrs,
+            dir,
+        } => (dir, true),
+    };
+    let Some(root) = models_root(dir) else {
+        eprintln!("error: no models folder; pass --models-dir");
+        return ExitCode::FAILURE;
+    };
+    if !fetch {
+        println!("models folder: {}", root.display());
+        for status in ocrs_status(&root) {
+            let state = if status.present { "present" } else { "missing" };
+            println!(
+                "ocrs  {:<24} {:>6.1} MB  {state}",
+                status.name,
+                status.size as f64 / 1e6
+            );
+        }
+        match tesseract_engine::resolve_path(dir.tesseract_path.as_deref()) {
+            Some(path) => println!(
+                "tesseract  {}  languages: {}",
+                path.display(),
+                tesseract_engine::languages(&path).join(", ")
+            ),
+            None => println!("tesseract  not found (https://github.com/tesseract-ocr/tesseract)"),
+        }
+        return ExitCode::SUCCESS;
+    }
+    let last = std::cell::Cell::new(u64::MAX);
+    let progress = |p: DownloadProgress| {
+        let percent = p.downloaded * 100 / p.total.max(1);
+        if percent != last.replace(percent) {
+            eprint!(
+                "\rDownloading ocrs models: {percent:>3}% ({:.1}/{:.1} MB)",
+                p.downloaded as f64 / 1e6,
+                p.total as f64 / 1e6
+            );
+        }
+    };
+    let result = fetch_ocrs(&root, &CancelToken::new(), &progress);
+    eprintln!();
+    match result {
+        Ok(()) => {
+            println!("ok ocrs -> {}", ocrs_dir(&root).display());
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn convert(args: ConvertArgs) -> ExitCode {
     let bases: Vec<PathBuf> = [
         std::env::current_dir().ok(),
         std::env::current_exe()
@@ -55,10 +219,20 @@ fn main() -> ExitCode {
     let registry = default_registry(&RegistryConfig {
         pdfium_library: resolve_pdfium(args.pdfium.clone(), &bases, Path::is_file),
     });
-    let options = ConvertOptions {
+    let mut options = ConvertOptions {
         extract_images: !args.no_images && !args.stdout,
+        ocr_language: args.ocr_lang.into(),
         ..ConvertOptions::default()
     };
+    if let Some(choice) = args.ocr {
+        match build_engine(choice.into(), &engine_config(&args.models)) {
+            Ok(engine) => options.ocr = Some(engine),
+            Err(error) => {
+                eprintln!("error: {error}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
     let allocator = OutputAllocator::new(&args.out);
     let cancel = CancelToken::new();
     let progress = |_: f32| {};

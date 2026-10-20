@@ -11,8 +11,12 @@ license.workspace = true
 name = "omnimark"
 path = "src/main.rs"
 
+[features]
+default = ["ocr-windows"]
+ocr-windows = ["omnimark-core/ocr-windows"]
+
 [dependencies]
-omnimark-core = { path = "../omnimark-core" }
+omnimark-core = { path = "../omnimark-core", features = ["ocr"] }
 clap.workspace = true
 
 

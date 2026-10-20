@@ -86,3 +86,61 @@ fn pdf_uses_vendor_pdfium_from_the_current_dir_by_default() {
     );
     assert!(!output.stdout.is_empty());
 }
+
+#[test]
+fn models_list_reports_missing_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+        .args(["models", "list", "--models-dir"])
+        .arg(dir.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("text-detection.onnx") && stdout.contains("text-recognition.onnx"));
+    assert_eq!(stdout.matches("missing").count(), 2, "{stdout}");
+    assert!(
+        stdout.lines().any(|line| line.starts_with("tesseract  ")),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn ocr_without_downloaded_models_fails_before_converting() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("a.txt");
+    std::fs::write(&input, "x").unwrap();
+    let out = dir.path().join("out");
+    let output = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+        .args(["convert", "--ocr=ocrs", "--models-dir"])
+        .arg(dir.path().join("models"))
+        .arg("-o")
+        .arg(&out)
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("ocrs models are not downloaded"));
+    assert!(!out.exists());
+}
+
+#[test]
+fn ocr_values_are_validated_and_documented() {
+    let output = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+        .args(["convert", "--ocr=bogus", "a.txt"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let help = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+        .args(["convert", "--help"])
+        .output()
+        .unwrap();
+    let help = String::from_utf8_lossy(&help.stdout);
+    assert!(
+        help.contains("--ocr")
+            && help.contains("--ocr-lang")
+            && help.contains("--models-dir")
+            && help.contains("--tesseract-path")
+    );
+    assert!(help.contains("tesseract"));
+}
