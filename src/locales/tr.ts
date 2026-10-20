@@ -112,6 +112,8 @@ const tr: Messages = {
   'kind.image': 'Görsel',
   'kind.audio': 'Ses',
   'kind.unknown': 'Bilinmiyor',
+  'firstRun.text': 'Markdown dosyaları şuraya kaydedilecek:',
+  'action.ok': 'Tamam',
 };
 
 export default tr;

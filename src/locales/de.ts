@@ -112,6 +112,8 @@ const de: Messages = {
   'kind.image': 'Bild',
   'kind.audio': 'Audio',
   'kind.unknown': 'Unbekannt',
+  'firstRun.text': 'Markdown-Dateien werden gespeichert in:',
+  'action.ok': 'OK',
 };
 
 export default de;

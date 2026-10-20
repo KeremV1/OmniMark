@@ -112,6 +112,8 @@ const es: Messages = {
   'kind.image': 'Imagen',
   'kind.audio': 'Audio',
   'kind.unknown': 'Desconocido',
+  'firstRun.text': 'Los archivos Markdown se guardarán en:',
+  'action.ok': 'Aceptar',
 };
 
 export default es;

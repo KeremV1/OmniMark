@@ -112,6 +112,8 @@ const fr: Messages = {
   'kind.image': 'Image',
   'kind.audio': 'Audio',
   'kind.unknown': 'Inconnu',
+  'firstRun.text': 'Les fichiers Markdown seront enregistrés dans :',
+  'action.ok': 'OK',
 };
 
 export default fr;

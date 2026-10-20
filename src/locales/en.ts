@@ -111,6 +111,8 @@ export const en = {
   'kind.image': 'Image',
   'kind.audio': 'Audio',
   'kind.unknown': 'Unknown',
+  'firstRun.text': 'Markdown files will be saved to:',
+  'action.ok': 'OK',
 } as const;
 
 export type MessageKey = keyof typeof en;

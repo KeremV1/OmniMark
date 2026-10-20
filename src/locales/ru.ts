@@ -112,6 +112,8 @@ const ru: Messages = {
   'kind.image': 'Изображение',
   'kind.audio': 'Аудио',
   'kind.unknown': 'Неизвестно',
+  'firstRun.text': 'Файлы Markdown будут сохранены в:',
+  'action.ok': 'ОК',
 };
 
 export default ru;

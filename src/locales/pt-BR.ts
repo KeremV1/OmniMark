@@ -112,6 +112,8 @@ const ptBR: Messages = {
   'kind.image': 'Imagem',
   'kind.audio': 'Áudio',
   'kind.unknown': 'Desconhecido',
+  'firstRun.text': 'Os arquivos Markdown serão salvos em:',
+  'action.ok': 'OK',
 };
 
 export default ptBR;

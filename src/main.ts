@@ -29,6 +29,7 @@ import {
 import type { Actions, View } from './ui/context';
 import { openDetailsDialog } from './ui/details';
 import { createDropzone, listenDragDrop } from './ui/dropzone';
+import { createFirstRun } from './ui/firstrun';
 import { createFooter } from './ui/footer';
 import { createList } from './ui/list';
 import { createPreview } from './ui/preview';
@@ -45,6 +46,7 @@ const FALLBACK_SETTINGS: Settings = {
   workers: 2,
   language: 'auto',
   ocr: { enabled: false },
+  onboarded: true,
 };
 
 let view: View = {
@@ -150,8 +152,11 @@ const actions: Actions = {
   },
   changeOutputDir() {
     pickFolder()
-      .then((dir) => (dir ? saveSettings({ ...view.settings, outputDir: dir }) : undefined))
+      .then((dir) => (dir ? saveSettings({ ...view.settings, outputDir: dir, onboarded: true }) : undefined))
       .catch(actions.fail);
+  },
+  dismissFirstRun() {
+    saveSettings({ ...view.settings, onboarded: true }).catch(actions.fail);
   },
   openOutputDir() {
     openOutputDir().catch(actions.fail);
@@ -221,10 +226,11 @@ function mount(): void {
   const dropzone = createDropzone(actions);
   const preview = createPreview(actions);
   const footer = createFooter(actions);
+  const firstRun = createFirstRun(actions);
 
   const pane = document.createElement('div');
   pane.className = 'pane';
-  pane.append(list.el, dropzone.el, dropzone.overlay);
+  pane.append(firstRun.el, list.el, dropzone.el, dropzone.overlay);
   const content = document.createElement('main');
   content.className = 'content';
   content.append(pane, preview.el);
@@ -242,6 +248,7 @@ function mount(): void {
       dropzone.update(v);
       preview.update(v);
       footer.update(v);
+      firstRun.update(v);
     },
     listHasFocus: () => list.hasFocus(),
     closeMenu: () => list.closeMenu(),

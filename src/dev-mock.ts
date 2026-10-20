@@ -56,6 +56,7 @@ let settings: Settings = {
   workers: 2,
   language: forcedLang && isLang(forcedLang) ? forcedLang : 'auto',
   ocr: { enabled: false },
+  onboarded: new URLSearchParams(location.search).get('scenario') !== 'firstrun',
 };
 let cancelDownload = false;
 let cancelRun: (() => void) | null = null;

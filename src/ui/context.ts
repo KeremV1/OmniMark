@@ -33,6 +33,8 @@ export interface Actions {
   showDetails(path: string): void;
   reveal(path: string): void;
   changeOutputDir(): void;
+  /** Marks the first-run card as answered. */
+  dismissFirstRun(): void;
   openOutputDir(): void;
   openSettings(): void;
   dismissNotice(): void;

@@ -52,6 +52,8 @@ export interface Settings {
   workers: number;
   language: SettingsLanguage;
   ocr: OcrSettings;
+  /** The first-run card was answered. */
+  onboarded: boolean;
 }
 
 /** Which OCR engine will run and whether it is ready (`ocr_status`). */
