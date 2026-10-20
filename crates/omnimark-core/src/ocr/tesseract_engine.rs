@@ -3,7 +3,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
-use std::io::{BufWriter, Read};
+use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,6 +16,7 @@ use super::{OcrEngine, OcrError, OcrImage, OcrLanguage};
 
 pub const TESSERACT_ENV: &str = "OMNIMARK_TESSERACT";
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_OUTPUT: u64 = 16 * 1024 * 1024;
 const RECOGNIZE_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -68,7 +69,11 @@ pub fn candidate_paths(
     let mut out: Vec<PathBuf> = configured.map(Path::to_path_buf).into_iter().collect();
     out.extend(env.filter(|value| !value.is_empty()).map(PathBuf::from));
     if let Some(path_var) = path_var {
-        out.extend(std::env::split_paths(&path_var).map(|dir| dir.join(exe_name())));
+        out.extend(
+            std::env::split_paths(&path_var)
+                .filter(|dir| dir.is_absolute())
+                .map(|dir| dir.join(exe_name())),
+        );
     }
     out.extend(well_known());
     out
@@ -76,7 +81,13 @@ pub fn candidate_paths(
 
 /// Only an existing file whose name (without extension) is `tesseract`, in any case.
 pub fn is_acceptable(path: &Path) -> bool {
-    path.is_file()
+    let exe_ok = !cfg!(windows)
+        || path
+            .extension()
+            .and_then(OsStr::to_str)
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"));
+    exe_ok
+        && path.is_file()
         && path
             .file_stem()
             .and_then(OsStr::to_str)
@@ -166,7 +177,9 @@ fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> JoinHandle<Vec<u8>> {
     std::thread::spawn(move || {
         let mut buffer = Vec::new();
         if let Some(mut pipe) = pipe {
-            let _ = pipe.read_to_end(&mut buffer);
+            let _ = (&mut pipe).take(MAX_OUTPUT).read_to_end(&mut buffer);
+            // Keep draining so the child never blocks on a full pipe.
+            let _ = std::io::copy(&mut pipe, &mut std::io::sink());
         }
         buffer
     })
@@ -207,7 +220,11 @@ fn run(program: &Path, args: &[&OsStr], timeout: Duration) -> Result<Output, Ocr
                 )));
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(e) => return Err(OcrError::Engine(e.to_string())),
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(OcrError::Engine(e.to_string()));
+            }
         }
     };
     Ok(Output {
@@ -241,9 +258,11 @@ impl TempPng {
             .open(&path)
             .map_err(|e| OcrError::Image(e.to_string()))?;
         let guard = Self(path);
+        let mut writer = BufWriter::new(file);
         DynamicImage::ImageRgba8(pixels)
-            .write_to(&mut BufWriter::new(file), ImageFormat::Png)
+            .write_to(&mut writer, ImageFormat::Png)
             .map_err(|e| OcrError::Image(e.to_string()))?;
+        writer.flush().map_err(|e| OcrError::Image(e.to_string()))?;
         Ok(guard)
     }
 
@@ -326,8 +345,9 @@ mod tests {
 
     #[test]
     fn candidates_follow_configured_env_path_then_well_known() {
-        let path_var =
-            std::env::join_paths([PathBuf::from("dir1"), PathBuf::from("dir2")]).unwrap();
+        let base = std::env::temp_dir();
+        let (dir1, dir2) = (base.join("dir1"), base.join("dir2"));
+        let path_var = std::env::join_paths([dir1.clone(), dir2.clone()]).unwrap();
         let list = candidate_paths(
             Some(Path::new("conf/tesseract")),
             Some(OsString::from("env/tesseract")),
@@ -340,13 +360,29 @@ mod tests {
         };
         assert_eq!(list[0], PathBuf::from("conf/tesseract"));
         assert_eq!(list[1], PathBuf::from("env/tesseract"));
-        assert_eq!(list[2], Path::new("dir1").join(exe));
-        assert_eq!(list[3], Path::new("dir2").join(exe));
+        assert_eq!(list[2], dir1.join(exe));
+        assert_eq!(list[3], dir2.join(exe));
         assert!(list.len() > 4, "well-known locations follow");
         let without_env = candidate_paths(None, Some(OsString::new()), None);
         assert!(without_env
             .iter()
             .all(|p| p.file_stem().unwrap().eq_ignore_ascii_case("tesseract")));
+    }
+
+    #[test]
+    fn relative_and_empty_path_entries_are_skipped() {
+        let abs = std::env::temp_dir().join("abs-dir");
+        let path_var =
+            std::env::join_paths([PathBuf::from("relative"), PathBuf::new(), abs.clone()]).unwrap();
+        let exe = if cfg!(windows) {
+            "tesseract.exe"
+        } else {
+            "tesseract"
+        };
+        let list = candidate_paths(None, None, Some(path_var));
+        assert_eq!(list[0], abs.join(exe));
+        assert!(!list.contains(&Path::new("relative").join(exe)));
+        assert!(!list.contains(&PathBuf::from(exe)));
     }
 
     #[test]
@@ -357,12 +393,23 @@ mod tests {
             "Tesseract.EXE",
             "evil.exe",
             "tesseract-wrapper",
+            "tesseract.bat",
+            "tesseract.cmd",
         ] {
             std::fs::write(dir.path().join(name), b"x").unwrap();
         }
         std::fs::create_dir(dir.path().join("sub")).unwrap();
         std::fs::create_dir(dir.path().join("sub/tesseract.exe")).unwrap();
-        assert!(is_acceptable(&dir.path().join("tesseract")));
+        // Windows runs only real executables, so a bare name is refused there.
+        assert_eq!(is_acceptable(&dir.path().join("tesseract")), !cfg!(windows));
+        assert_eq!(
+            is_acceptable(&dir.path().join("tesseract.bat")),
+            !cfg!(windows)
+        );
+        assert_eq!(
+            is_acceptable(&dir.path().join("tesseract.cmd")),
+            !cfg!(windows)
+        );
         assert!(is_acceptable(&dir.path().join("Tesseract.EXE")));
         assert!(!is_acceptable(&dir.path().join("evil.exe")));
         assert!(!is_acceptable(&dir.path().join("tesseract-wrapper")));
