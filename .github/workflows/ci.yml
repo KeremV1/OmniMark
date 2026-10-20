@@ -36,7 +36,7 @@ jobs:
       - run: npm run build
       - name: Tesseract (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng
       - name: Tesseract (macOS)
         if: runner.os == 'macOS'
         run: brew install tesseract tesseract-lang
