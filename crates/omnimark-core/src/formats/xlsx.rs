@@ -8,6 +8,7 @@ use quick_xml::events::Event;
 use crate::archive::Archive;
 use crate::error::{ConvertError, Result};
 use crate::markdown::{self, MAX_TABLE_CELLS, MAX_TABLE_COLUMNS};
+use crate::ocr::{block_markdown, DocumentOcr};
 use crate::ooxml::{parse_relationships, rels_path_for, resolve_part};
 use crate::registry::{ConvertContext, Converter};
 use crate::xml;
@@ -45,8 +46,10 @@ impl Converter for XlsxConverter {
             .extension()
             .map(|e| e.to_string_lossy().to_ascii_lowercase())
             .unwrap_or_default();
-        let want_images =
-            ctx.options.extract_images && matches!(extension.as_str(), "xlsx" | "xlsm");
+        let mut ocr = DocumentOcr::new(ctx.options);
+        let mut notes = Document::default();
+        let want_images = (ctx.options.extract_images || ocr.is_some())
+            && matches!(extension.as_str(), "xlsx" | "xlsm");
 
         let sheets: Vec<(String, bool)> = workbook
             .sheets_metadata()
@@ -76,7 +79,7 @@ impl Converter for XlsxConverter {
                 section.push_str(&table);
             }
             if want_images {
-                match store_sheet_images(&input.bytes, name, ctx) {
+                match store_sheet_images(&input.bytes, name, ctx, ocr.as_mut(), &mut notes) {
                     Ok(lines) if !lines.is_empty() => {
                         section.push_str("\n\n");
                         section.push_str(&lines.join("\n"));
@@ -93,6 +96,9 @@ impl Converter for XlsxConverter {
         document.warnings = warnings;
         if truncated {
             document.warn_once(markdown::TABLE_WARNING);
+        }
+        for warning in notes.warnings {
+            document.warn_once(&warning);
         }
         Ok(document)
     }
@@ -212,11 +218,13 @@ fn empty_window(height: usize, width: usize) -> (Vec<Vec<String>>, bool) {
     (vec![vec![String::new(); kept_width]; kept_height], cut)
 }
 
-/// Stores every image of a sheet and returns the Markdown image lines.
+/// Stores (and, with OCR on, reads) every image of a sheet and returns the Markdown lines.
 fn store_sheet_images(
     bytes: &[u8],
     sheet_name: &str,
     ctx: &mut ConvertContext<'_>,
+    mut ocr: Option<&mut DocumentOcr>,
+    notes: &mut Document,
 ) -> Result<Vec<String>> {
     let mut archive = Archive::open(bytes)?;
     let images = sheet_images(&mut archive, sheet_name)?;
@@ -225,11 +233,20 @@ fn store_sheet_images(
         ctx.check_cancel()?;
         let data = read_part(&mut archive, &part)?;
         let file_name = part.rsplit('/').next().unwrap_or("image");
-        let link = ctx.assets.store(file_name, &data)?;
-        lines.push(markdown::image(
-            alt.as_deref().unwrap_or(""),
-            link.as_deref(),
-        ));
+        let link = if ctx.options.extract_images {
+            ctx.assets.store(file_name, &data)?
+        } else {
+            None
+        };
+        let md = markdown::image(alt.as_deref().unwrap_or(""), link.as_deref());
+        let text = match ocr.as_deref_mut() {
+            Some(ocr) => ocr.image_bytes(&data, ctx.cancel, notes)?,
+            None => None,
+        };
+        lines.push(match text {
+            Some(text) => format!("{md}\n\n{}\n", block_markdown(&text)),
+            None => md,
+        });
     }
     Ok(lines)
 }
@@ -609,5 +626,36 @@ mod tests {
         let header = doc.markdown.lines().nth(2).unwrap();
         assert_eq!(header.matches('|').count(), markdown::MAX_TABLE_COLUMNS + 1);
         assert!(header.starts_with("| 1 |"));
+    }
+
+    #[test]
+    fn ocr_reads_sheet_images_even_when_extraction_is_off() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/markitdown/ocr/xlsx_image_middle.xlsx");
+        let options = crate::ConvertOptions {
+            extract_images: false,
+            ocr: Some(std::sync::Arc::new(crate::ocr::MockEngine::default())),
+            ..crate::ConvertOptions::default()
+        };
+        let mut sink = crate::assets::NullAssetSink;
+        let cancel = crate::CancelToken::new();
+        let progress = |_: f32| {};
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut sink,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        let doc = XlsxConverter
+            .convert(
+                &Input {
+                    path: path.clone(),
+                    bytes: std::fs::read(&path).unwrap(),
+                },
+                &mut ctx,
+            )
+            .unwrap();
+        assert_eq!(doc.markdown.matches("MOCK\\_OCR\\_TEXT\\_12345").count(), 2);
+        assert!(doc.markdown.contains("]()\n\n*[Image OCR]\\\n"));
     }
 }

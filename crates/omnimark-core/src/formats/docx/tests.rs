@@ -341,3 +341,74 @@ fn huge_grid_spans_are_capped_with_one_warning() {
     );
     assert_eq!(doc.warnings, vec!["Large table truncated.".to_string()]);
 }
+
+fn convert_docx_ocr(bytes: Vec<u8>) -> Document {
+    let options = ConvertOptions {
+        ocr: Some(std::sync::Arc::new(crate::ocr::MockEngine::default())),
+        ..ConvertOptions::default()
+    };
+    let mut assets = MemoryAssetSink::new("t_assets");
+    let cancel = CancelToken::new();
+    let progress = |_: f32| {};
+    let mut ctx = ConvertContext {
+        options: &options,
+        assets: &mut assets,
+        cancel: &cancel,
+        progress: &progress,
+    };
+    DocxConverter
+        .convert(
+            &Input {
+                path: "t.docx".into(),
+                bytes,
+            },
+            &mut ctx,
+        )
+        .unwrap()
+}
+
+const B: &str = "*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*";
+
+fn image_docx(body: &str) -> Vec<u8> {
+    let png = crate::ocr::test_render::png_bytes(20, 20, [0, 0, 0, 255]);
+    let rels = r#"<Relationship Id="rId1" Type="t/image" Target="media/a.png"/>"#;
+    build_docx(rels, body, &[("word/media/a.png", &png)])
+}
+
+#[test]
+fn ocr_block_follows_the_image_paragraph_and_repeats_from_cache() {
+    let body = format!(
+        "{}{}{}",
+        drawing(r#"r:embed="rId1""#),
+        p("<w:r><w:t>after</w:t></w:r>"),
+        drawing(r#"r:embed="rId1""#)
+    );
+    let doc = convert_docx_ocr(image_docx(&body));
+    assert_eq!(
+        doc.markdown,
+        format!("![pic](t_assets/a.png)\n\n{B}\n\nafter\n\n![pic](t_assets/a.png)\n\n{B}")
+    );
+}
+
+#[test]
+fn ocr_in_a_table_cell_is_one_line_and_in_a_list_item_is_indented() {
+    let cell = drawing(r#"r:embed="rId1""#);
+    let table = format!(
+        "<w:tbl><w:tr><w:tc>{cell}</w:tc><w:tc>{}</w:tc></w:tr></w:tbl>",
+        p("<w:r><w:t>x</w:t></w:r>")
+    );
+    let doc = convert_docx_ocr(image_docx(&table));
+    assert!(
+        doc.markdown.starts_with(
+            "| ![pic](t_assets/a.png) *[Image OCR] MOCK\\_OCR\\_TEXT\\_12345 [End OCR]* | x |"
+        ),
+        "{}",
+        doc.markdown
+    );
+    let item = r#"<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr><w:r><w:drawing><wp:inline><wp:docPr id="1" descr="pic"/><a:graphic><a:blip r:embed="rId1"/></a:graphic></wp:inline></w:drawing></w:r></w:p>"#;
+    let doc = convert_docx_ocr(image_docx(item));
+    assert_eq!(
+        doc.markdown,
+        "- ![pic](t_assets/a.png)\n\n  *[Image OCR]\\\n  MOCK\\_OCR\\_TEXT\\_12345\\\n  [End OCR]*"
+    );
+}
