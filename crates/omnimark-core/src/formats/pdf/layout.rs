@@ -245,8 +245,21 @@ fn median(values: &mut [f32]) -> Option<f32> {
     Some(values[values.len() / 2])
 }
 
-/// Renders the words of one page as Markdown text (headings, lists, paragraphs).
-pub(crate) fn render_text_page(words: &[Word], body: f32, heading_sizes: &[f32]) -> String {
+/// A Markdown block (recognized image text) with the top edge of its source, in page points.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PlacedBlock {
+    pub top: f32,
+    pub markdown: String,
+}
+
+/// Renders the words of one page as Markdown text (headings, lists, paragraphs). `blocks`
+/// (sorted by top) are placed between lines by their top edge; the rest go to the end.
+pub(crate) fn render_text_page(
+    words: &[Word],
+    body: f32,
+    heading_sizes: &[f32],
+    blocks: &[PlacedBlock],
+) -> String {
     let lines = lines_from_words(words);
     let mut pitches: Vec<f32> = lines.windows(2).map(|w| w[1].top - w[0].top).collect();
     let paragraph_gap = median(&mut pitches).map(|m| m * PARAGRAPH_GAP_RATIO);
@@ -261,7 +274,17 @@ pub(crate) fn render_text_page(words: &[Word], body: f32, heading_sizes: &[f32])
     let mut prev_heading_level: Option<usize> = None;
     let mut prev_was_list = false;
 
+    let mut next_block = 0;
     for line in &lines {
+        while let Some(block) = blocks.get(next_block).filter(|b| b.top < line.top) {
+            blank(&mut out);
+            out.push(block.markdown.clone());
+            out.push(String::new());
+            next_block += 1;
+            prev = None;
+            prev_heading_level = None;
+            prev_was_list = false;
+        }
         let level = if is_heading_line(line, body) {
             heading_sizes
                 .iter()
@@ -307,6 +330,11 @@ pub(crate) fn render_text_page(words: &[Word], body: f32, heading_sizes: &[f32])
         }
         prev_heading_level = None;
         prev = Some(line);
+    }
+    for block in &blocks[next_block..] {
+        blank(&mut out);
+        out.push(block.markdown.clone());
+        out.push(String::new());
     }
     out.join("\n").trim().to_string()
 }
@@ -385,10 +413,35 @@ mod tests {
         ];
         let body = body_size(&words);
         let headings = heading_sizes(&words, body);
-        let md = render_text_page(&words, body, &headings);
+        let md = render_text_page(&words, body, &headings, &[]);
         assert_eq!(
             md.trim(),
             "# Report\n\n## Intro\n\nBody text\nmore\n\n- item"
+        );
+    }
+
+    #[test]
+    fn placed_blocks_go_between_lines_by_their_top() {
+        let words = vec![
+            word("Before", 10.0, 100.0, 10.0),
+            word("After", 10.0, 300.0, 10.0),
+        ];
+        let block = |top: f32, md: &str| PlacedBlock {
+            top,
+            markdown: md.into(),
+        };
+        let blocks = [block(50.0, "TOP"), block(200.0, "MID"), block(900.0, "END")];
+        assert_eq!(
+            render_text_page(&words, 10.0, &[], &blocks),
+            "TOP
+
+Before
+
+MID
+
+After
+
+END"
         );
     }
 
@@ -400,7 +453,7 @@ mod tests {
             word("Body", 72.0, 130.0, 10.0),
         ];
         let body = 10.0;
-        let md = render_text_page(&words, body, &heading_sizes(&words, body));
+        let md = render_text_page(&words, body, &heading_sizes(&words, body), &[]);
         assert_eq!(md, "# Long title\n\nBody");
     }
 
