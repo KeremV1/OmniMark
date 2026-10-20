@@ -139,10 +139,44 @@ pub fn fetch(
     cancel: &CancelToken,
     progress: &dyn Fn(DownloadProgress),
 ) -> Result<(), DownloadError> {
+    fetch_with(dir, files, cancel, progress, Timeouts::default())
+}
+
+/// Network timeouts of one download. A stalled server must fail instead of hanging forever.
+#[derive(Clone, Copy)]
+struct Timeouts {
+    connect: Duration,
+    recv_response: Duration,
+    recv_body: Duration,
+    global: Duration,
+}
+
+impl Default for Timeouts {
+    fn default() -> Self {
+        Self {
+            connect: Duration::from_secs(20),
+            recv_response: Duration::from_secs(30),
+            recv_body: Duration::from_secs(30),
+            global: Duration::from_secs(15 * 60),
+        }
+    }
+}
+
+fn fetch_with(
+    dir: &Path,
+    files: &[ModelFile],
+    cancel: &CancelToken,
+    progress: &dyn Fn(DownloadProgress),
+    timeouts: Timeouts,
+) -> Result<(), DownloadError> {
     std::fs::create_dir_all(dir)?;
+    remove_stale_parts(dir);
     let total: u64 = files.iter().map(|file| file.size).sum();
     let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_connect(Some(Duration::from_secs(20)))
+        .timeout_connect(Some(timeouts.connect))
+        .timeout_recv_response(Some(timeouts.recv_response))
+        .timeout_recv_body(Some(timeouts.recv_body))
+        .timeout_global(Some(timeouts.global))
         .build()
         .into();
     let mut done = 0u64;
@@ -201,7 +235,27 @@ pub fn verify(path: &Path, file: &ModelFile) -> std::io::Result<bool> {
     Ok(hex(&hasher.finalize()) == file.sha256)
 }
 
-/// Streams `reader` into `<dir>/<name>.part`, checks it, then renames it into place. The
+/// Best effort: removes `*.part` files left behind by crashed downloads (older than an hour).
+fn remove_stale_parts(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let stale = path.extension().is_some_and(|e| e == "part")
+            && entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|age| age > Duration::from_secs(3600));
+        if stale {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+/// Streams `reader` into a unique `<dir>/<name>.<pid>-<nanos>.part`, checks it, then renames it into place. The
 /// partial file is removed on any failure, including cancellation.
 pub(crate) fn install(
     reader: &mut dyn Read,
@@ -210,7 +264,10 @@ pub(crate) fn install(
     cancel: &CancelToken,
     on_bytes: &mut dyn FnMut(u64),
 ) -> Result<(), DownloadError> {
-    let part = dir.join(format!("{}.part", file.name));
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let part = dir.join(format!("{}.{}-{nanos}.part", file.name, std::process::id()));
     let result = write_checked(reader, &part, file, cancel, on_bytes)
         .and_then(|()| std::fs::rename(&part, dir.join(file.name)).map_err(DownloadError::from));
     if result.is_err() {
@@ -226,7 +283,10 @@ fn write_checked(
     cancel: &CancelToken,
     on_bytes: &mut dyn FnMut(u64),
 ) -> Result<(), DownloadError> {
-    let mut out = File::create(part)?;
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(part)?;
     let mut hasher = Sha256::new();
     let mut written = 0u64;
     let mut buffer = vec![0u8; CHUNK];
@@ -421,6 +481,110 @@ mod tests {
         );
         // The server is gone: a second fetch must not connect at all.
         fetch(dir.path(), &files, &CancelToken::new(), &|_| {}).unwrap();
+    }
+
+    /// Serves a 200 response whose body is cut short or never arrives.
+    fn serve_raw(responses: Vec<Vec<u8>>, stall: bool) -> (String, std::thread::JoinHandle<()>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            for response in responses {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = Vec::new();
+                let mut byte = [0u8; 1];
+                while !request.ends_with(b"\r\n\r\n") {
+                    if stream.read(&mut byte).unwrap() == 0 {
+                        break;
+                    }
+                    request.push(byte[0]);
+                }
+                stream.write_all(&response).unwrap();
+                if stall {
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                }
+            }
+        });
+        (format!("http://{address}"), handle)
+    }
+
+    fn part_files(dir: &Path) -> Vec<String> {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".part"))
+            .collect()
+    }
+
+    #[test]
+    fn stalled_download_times_out_and_leaves_no_part_file() {
+        let head =
+            b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\nabc".to_vec();
+        let (base, server) = serve_raw(vec![head], true);
+        let data = vec![7u8; 100];
+        let files = [model("s.onnx", leak(format!("{base}/s.onnx")), &data)];
+        let dir = tempfile::tempdir().unwrap();
+        let timeouts = Timeouts {
+            connect: std::time::Duration::from_secs(1),
+            recv_response: std::time::Duration::from_secs(1),
+            recv_body: std::time::Duration::from_secs(1),
+            global: std::time::Duration::from_secs(2),
+        };
+        let started = std::time::Instant::now();
+        let result = fetch_with(dir.path(), &files, &CancelToken::new(), &|_| {}, timeouts);
+        assert!(
+            matches!(result, Err(DownloadError::Network(_))),
+            "{result:?}"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(4));
+        assert!(part_files(dir.path()).is_empty());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn short_body_is_rejected_without_leftovers() {
+        let data = vec![5u8; 100];
+        let head = b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\nConnection: close\r\n\r\n0123456789"
+            .to_vec();
+        let (base, server) = serve_raw(vec![head], false);
+        let files = [model("t.onnx", leak(format!("{base}/t.onnx")), &data)];
+        let dir = tempfile::tempdir().unwrap();
+        let result = fetch(dir.path(), &files, &CancelToken::new(), &|_| {});
+        assert!(
+            matches!(result, Err(DownloadError::Size { .. })),
+            "{result:?}"
+        );
+        assert!(part_files(dir.path()).is_empty());
+        assert!(!dir.path().join("t.onnx").exists());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn http_error_for_second_file_keeps_the_first_and_leaves_no_part_file() {
+        let a = vec![1u8; 20];
+        let ok = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            a.len()
+        );
+        let mut first = ok.into_bytes();
+        first.extend_from_slice(&a);
+        let second =
+            b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec();
+        let (base, server) = serve_raw(vec![first, second], false);
+        let b = vec![2u8; 20];
+        let files = [
+            model("a.onnx", leak(format!("{base}/a.onnx")), &a),
+            model("b.onnx", leak(format!("{base}/b.onnx")), &b),
+        ];
+        let dir = tempfile::tempdir().unwrap();
+        let result = fetch(dir.path(), &files, &CancelToken::new(), &|_| {});
+        assert!(
+            matches!(result, Err(DownloadError::Network(_))),
+            "{result:?}"
+        );
+        assert!(verify(&dir.path().join("a.onnx"), &files[0]).unwrap());
+        assert!(!dir.path().join("b.onnx").exists());
+        assert!(part_files(dir.path()).is_empty());
+        server.join().unwrap();
     }
 
     #[test]

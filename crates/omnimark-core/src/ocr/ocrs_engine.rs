@@ -18,11 +18,20 @@ impl OcrsEngine {
     pub fn load(models_root: &Path) -> Result<Self, OcrError> {
         let dir = ocrs_dir(models_root);
         for file in &OCRS_MODELS {
-            if !verify(&dir.join(file.name), file).unwrap_or(false) {
-                return Err(OcrError::Unavailable(format!(
-                    "ocrs model {} is missing or damaged; download it again",
-                    file.name
-                )));
+            match verify(&dir.join(file.name), file) {
+                Ok(true) => {}
+                Ok(false) => {
+                    return Err(OcrError::Unavailable(format!(
+                        "ocrs model {} is missing or damaged; download it again",
+                        file.name
+                    )))
+                }
+                Err(error) => {
+                    return Err(OcrError::Unavailable(format!(
+                        "ocrs model {} could not be read: {error}",
+                        file.name
+                    )))
+                }
             }
         }
         let load = |name: &str| {
