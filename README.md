@@ -21,24 +21,32 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** ✅ M1 tamamlandı. 🔄 M2 (görsel metadata + OCR): tasarım ve 9 görevlik plan hazır; kodlama sonraki oturumda başlıyor.
+> **Durum:** ✅ M1 tamamlandı. 🔄 M2 (görsel metadata + OCR) sürüyor: **7/9 görev** `main`'de; kalanlar M2-3B (OCR kalite ölçümü), M2-6 (uygulamada OCR ayarları) ve M2-7 (ölçümler, CI, belgeler).
 
 ## Kaldığımız yer
 
-**Geldiğimiz nokta (2026-10-20):** M1 bitti; büyük belge önizlemesi hafifletildi; M2 tasarlandı ve planlandı.
-- **Dönüştürücüler:** PDF (pdfium; tablo ve form tespiti), Word (başlık, liste, tablo, görsel, dipnot, formül → LaTeX), Excel (XLSX/XLSM/XLS/ODS), PowerPoint (slayt, tablo, grafik, not), HTML, CSV (`;`/sekme tespiti), TXT/MD/JSON.
+**Geldiğimiz nokta (2026-10-20, akşam):** M1 bitti. M2'nin çekirdek kısmı `main`'de: görsel dosyalar, üç OCR motoru, PDF ve Office belgelerinde OCR.
+- **M2'de bugün yapılanlar (7/9 görev):**
+  - **M2-0** OCR çekirdeği: ortak motor arayüzü, görsel çözme sınırları, önbellek, `*[Image OCR]` blok biçimi.
+  - **M2-1** Görsel dönüştürücü: EXIF ve XMP metadata (MarkItDown alan sırası).
+  - **M2-3A** Windows OCR: Windows'un kendi motoru. İndirme gerektirmiyor ve Türkçe metni hatasız okudu. Çok büyük görselleri küçültüyor.
+  - **M2-8** Tesseract: sistemdeki programı kabuksuz ve sabit argümanlarla, zaman aşımıyla çalıştırıyor. Türkçe metni hatasız okudu.
+  - **M2-2** ocrs: tüm platformlarda çalışan motor. ~12 MB model isteğe bağlı iniyor; indirme SHA-256 ile doğrulanıyor, zaman aşımlı ve iptal edilebilir. Komut satırına `--ocr`, `models list` ve `models fetch ocrs` eklendi.
+  - **M2-4** PDF'te OCR: sayfadaki görseller ve taranmış sayfalar okunuyor. OCR pdfium kilidi dışında çalışıyor ve bellek sayfa başına sınırlı.
+  - **M2-5** Word, PowerPoint ve Excel'deki görsellerde OCR: aynı görsel iki kez okunmuyor.
+- Her görevi Sonnet ajanları yazdı, Opus inceledi. Opus'un bulduğu önemli sorunlar birleştirmeden önce düzeltildi: indirmenin asılı kalması, sayfa başına sınırsız bellek ve Tesseract kurulum betiğinin kalıntı bırakması.
+- **OCR varsayılan kapalı.** Şimdilik yalnız komut satırından açılıyor: `omnimark convert foto.jpg --ocr`. Uygulamadaki ayarı M2-6'da gelecek.
+- **Dönüştürücüler:** PDF (pdfium; tablo ve form tespiti), Word (başlık, liste, tablo, görsel, dipnot, formül → LaTeX), Excel (XLSX/XLSM/XLS/ODS), PowerPoint (slayt, tablo, grafik, not), HTML, CSV (`;`/sekme tespiti), TXT/MD/JSON ve **görseller (EXIF/XMP + isteğe bağlı OCR)**.
 - **Masaüstü uygulaması (Tauri 2):** dosya kuyruğu, sürükle-bırak, ilerleme, filtreler, Markdown önizleme (Görünüm/Kaynak), ayarlar, kısayollar, açık/koyu tema, Türkçe/İngilizce.
-- **Komut satırı:** `omnimark convert dosya.pdf -o çıktı`.
-- **Güvenlik:** kötü niyetli dosyalara karşı bellek/boyut sınırları, harici bağlantılar asla açılmaz, çökmeler dosya bazında yalıtılır, arayüz yalnızca çıktı klasöründeki `.md` dosyalarını okuyabilir.
-- **M2 hazırlığı:** [tasarım](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md) ve [9 görevlik plan](docs/superpowers/plans/2026-10-19-omnimark-m2/00-genel.md). Üç OCR motoru: Windows yerleşik (indirmesiz, Türkçe destekli), sistemde kuruluysa Tesseract (macOS/Linux'ta Türkçe için) ve ocrs (tüm platformlar, ~12 MB model isteğe bağlı iner; Türkçe harf tanımıyor). OCR varsayılan kapalı.
-- **Önizleme:** belgenin ilk ~64 KB'ı çizilir; üstte belgenin **tamamının başlık listesi** görünür; kesildiyse "ilk 64 KB gösteriliyor" şeridi ve **Varsayılan uygulamada aç** düğmesi çıkar. Büyük belgede önizleme belleği +294 MB'tan **+24 MB**'a indi (hedef +50 MB ✅); kapatınca ~21 MB WebView2'de kalıyor (önizleme boyutundan bağımsız).
-- **Testler:** 160 Rust + 27 arayüz testi geçiyor; CI her push'ta Windows, macOS ve Linux'ta yeşil.
-- **Ölçümler (Windows, kurulu sürüm):** kurulum dosyası **5,4 MB** · pencere açılışı **59 ms** · boşta bellek **71 MB** (Görev Yöneticisi "Bellek" toplamı, WebView2 dahil; hedef < 100 MB ✅). Ayrıntı: [docs/m1-olcumler.md](docs/m1-olcumler.md).
+- **Güvenlik:** kötü niyetli dosyalara karşı bellek ve boyut sınırları var. Harici bağlantılar asla açılmıyor. Bir dosyanın çökmesi diğerlerini etkilemiyor. Arayüz yalnız çıktı klasöründeki `.md` dosyalarını okuyabiliyor.
+- **Önizleme:** belgenin ilk ~64 KB'ı çiziliyor ve belgenin tamamının başlık listesi gösteriliyor. Önizleme belleği +24 MB.
+- **Testler:** 227 Rust testi (OCR özellikleri açıkken 190 çekirdek testi) ve 27 arayüz testi geçiyor.
+- **Ölçümler (Windows, kurulu sürüm):** kurulum dosyası **5,4 MB** · açılış **59 ms** · boşta bellek **71 MB** (hedef < 100 MB ✅). Ayrıntı: [docs/m1-olcumler.md](docs/m1-olcumler.md).
 
 **Sıradaki iş (sonraki oturum):**
-1. **M2'yi uygulamak:** görsel dosyaları (EXIF/XMP metadata) ve isteğe bağlı OCR. Tasarım ve görev planı hazır: [M2 tasarımı](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md) · [M2 planı](docs/superpowers/plans/2026-10-19-omnimark-m2/00-genel.md). Başlangıç: Görev M2-0.
-2. **Kalan elle testler:** İptal ve 64 KB önizleme (aşağıda).
-3. **M3:** ses transkripsiyonu (yerel Whisper, isteğe bağlı modül).
+1. **M2-3B:** Windows, Tesseract ve ocrs motorlarının Türkçe ve İngilizce kalite karşılaştırması (`docs/m2-ocr-kalite.md`); varsayılan motor seçimini doğrulamak için.
+2. **M2-6:** masaüstü uygulamasında OCR ayarları: motor ve dil seçimi, Tesseract yolu, ocrs modelini ilerleme çubuğuyla indirme. Ardından **M2-7:** bellek ölçümleri, CI'da OCR testleri, belgeler. Sonra M2 biter.
+3. **Kalan elle testler** (aşağıda), ardından **M3:** ses transkripsiyonu.
 
 **Elle testler** (2026-10-19, kullanıcı):
 - [x] Explorer'dan dosya ve klasör sürükle-bırak (klasörde desteklenmeyen dosyalar bilerek atlanır).
@@ -49,9 +57,9 @@
 - [ ] **İptal**: dönüşüm çok hızlı bittiği için denenemedi → 50+ dosya ya da birkaç büyük PDF ile dönüştürmeyi başlatıp hemen İptal'e bas.
 - [ ] **64 KB önizleme**: büyük bir belgede "ilk 64 KB gösteriliyor" şeridi, başlık listesi; Görev Yöneticisi'nde bellek.
 
-Kontrol edilecek diğer konular: oturum boyunca senin adına verilen kararlar [HANDOFF.md](HANDOFF.md) dosyasında listeli.
+Kontrol edilecek diğer konular: senin adına verilen kararlar (M2 kararları dahil) [HANDOFF.md](HANDOFF.md) dosyasında, "Onay bekleyen kararlar" bölümünde.
 
-Ayrıntı: [HANDOFF.md](HANDOFF.md) · [plan](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md) · [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md) · [ölçümler](docs/m1-olcumler.md)
+Ayrıntı: [HANDOFF.md](HANDOFF.md) · [M2 planı](docs/superpowers/plans/2026-10-19-omnimark-m2/00-genel.md) · [M2 tasarımı](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md) · [M1 planı](docs/superpowers/plans/2026-10-15-omnimark-m1/00-genel.md) · [tasarım](docs/superpowers/specs/2026-10-15-omnimark-m1-design.md) · [ölçümler](docs/m1-olcumler.md)
 
 ## Desteklenen formatlar
 
@@ -62,13 +70,13 @@ Ayrıntı: [HANDOFF.md](HANDOFF.md) · [plan](docs/superpowers/plans/2026-10-15-
 | Excel | `.xlsx`, `.xlsm`, `.xls`, `.ods` | Her sayfa için ayrı başlık ve Markdown tablosu |
 | PowerPoint | `.pptx` | Slayt slayt başlıklar, metinler, tablolar, grafik verileri, konuşmacı notları |
 | HTML | `.html`, `.htm` | Gövde içeriği; script ve stil blokları ayıklanır |
-| Görsel (M2) | `.png`, `.jpg`, `.jpeg`, `.webp` … | EXIF metadata, isteğe bağlı OCR |
+| Görsel | `.png`, `.jpg`, `.jpeg`, `.webp` … | EXIF/XMP metadata, isteğe bağlı OCR |
 | Ses (M3) | `.wav`, `.mp3`, `.m4a` … | Metadata, isteğe bağlı konuşmadan metne çeviri |
 | Metin | `.txt`, `.md`, `.markdown`, `.json`, `.jsonl`, `.csv` | Düz metin; JSON kod bloğu; CSV için Markdown tablosu |
 
-Görsel ve ses M2/M3'te gelecek. Kütüphane seçimleri: [docs/research/](docs/research/).
+Ses M3'te gelecek. Kütüphane seçimleri: [docs/research/](docs/research/).
 
-OCR ve ses transkripsiyonu **isteğe bağlı modüller** olacak. Gerekli modeller ilk kullanımda indirilecek, böylece temel kurulum küçük kalacak.
+OCR ve ses transkripsiyonu **isteğe bağlı modüller**: OCR varsayılan kapalı. Windows'un kendi OCR'ı indirme gerektirmez. Tesseract sistemde kuruluysa kullanılır. ocrs modeli (~12 MB) yalnız istenirse iner. Böylece temel kurulum küçük kalır.
 
 ## Kullanım akışı
 
@@ -96,7 +104,7 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 | Aşama | Kapsam | Yol haritası adımları | Durum | İlerleme |
 | --- | --- | --- | --- | --- |
 | **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | ✅ Tamamlandı | 19/19 görev |
-| **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | 🔄 Sıradaki | tasarım + plan hazır, 0/9 görev |
+| **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | 🔄 Sürüyor | 7/9 görev (kalan: M2-3B, M2-6, M2-7) |
 | **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏳ Planlandı | — |
 | **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans iyileştirmeleri | 7 | ⏳ Planlandı | — |
 | **M5** | Windows, macOS ve Linux kurulum paketleri, imzalama | 8 | ⏳ Planlandı | — |
@@ -134,9 +142,12 @@ npm run tauri build -- --bundles nsis                     # Windows kurulum dosy
 cargo test --workspace                                    # Rust testleri (golden dahil)
 npm test                                                  # arayüz testleri
 cargo run -p omnimark-cli -- convert dosya.pdf -o çıktı   # komut satırı
+cargo run -p omnimark-cli -- convert foto.jpg --stdout --ocr        # OCR (Windows → Tesseract → ocrs)
+cargo run -p omnimark-cli -- models fetch ocrs            # ocrs modelini indir (~12 MB)
+scripts/fetch-tesseract.ps1                               # isteğe bağlı: OCR testleri için proje içi Tesseract (Windows)
 ```
 
-Not: proje yolunda `&` varsa npm/tauri komutlarını `subst O: "<proje yolu>"` ile `O:\` üzerinden çalıştır.
+Not: proje yolunda `&` varsa npm/tauri komutlarını üst klasörü `subst O: "<üst klasör>"` ile bağlayıp `O:\OmniMark` üzerinden çalıştır; bitince `subst O: /D`.
 
 Araştırma notları:
 
