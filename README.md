@@ -26,7 +26,7 @@
 
 ## Kaldığımız yer
 
-**Geldiğimiz nokta (2026-10-20):** M2 kapanış turuyla birlikte tamamen bitti. Türkçe öncelikli M2 sonu hâli [`v0.1.0-tr`](https://github.com/KeremV1/OmniMark/releases/tag/v0.1.0-tr) etiketinde saklanıyor.
+**Geldiğimiz nokta (2026-10-20):** M2 kapanış turuyla birlikte tamamen bitti ve elle testlerle onaylandı. Türkçe öncelikli M2 sonu hâli [`v0.1.0-tr`](https://github.com/KeremV1/OmniMark/releases/tag/v0.1.0-tr) etiketinde saklanıyor.
 
 ### M2 kapanış turu (M3 öncesi)
 
