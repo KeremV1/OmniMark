@@ -14,7 +14,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::error::AppError;
 use crate::inspect::{inspect, InspectResult};
 use crate::jobs::{run_batch, BatchRequest, ConvertEvent};
-use crate::settings::{effective_ocr_language, Settings};
+use crate::settings::{effective_ocr_language, OcrSettings, Settings};
 use crate::AppState;
 
 /// Largest dropped selection (files after folder expansion) handled in one go.
@@ -444,8 +444,16 @@ pub enum DownloadEvent {
 
 /// Which engines this machine offers; asks Windows and runs `tesseract`, so off the UI thread.
 #[tauri::command]
-pub async fn ocr_status(state: State<'_, AppState>) -> Result<OcrStatus, AppError> {
-    let settings = current_settings(&state);
+pub async fn ocr_status(
+    state: State<'_, AppState>,
+    draft: Option<OcrSettings>,
+) -> Result<OcrStatus, AppError> {
+    let mut settings = current_settings(&state);
+    // The settings dialog passes its unsaved choices so the status follows them.
+    if let Some(draft) = draft {
+        settings.ocr = draft;
+        settings = settings.sanitized(&state.default_output_dir);
+    }
     let models_root = state.models_root.clone();
     let downloading = lock(&state.downloading).is_some();
     tauri::async_runtime::spawn_blocking(move || {

@@ -10,6 +10,7 @@ import {
   pickProgram,
   type OcrEngineChoice,
   type OcrLanguage,
+  type OcrSettings,
   type OcrStatus,
   type Settings,
   type SettingsLanguage,
@@ -175,17 +176,39 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     setText(downloadButton, t('ocr.download', { size: formatMegabytes(status.ocrsDownloadBytes, getLang()) }));
     // The Windows engine cannot be chosen where it is not built in.
     (engine.querySelector('option[value="windows"]') as HTMLOptionElement).disabled = !status.windowsBuilt;
+    if (!status.windowsBuilt && engine.value === 'windows') {
+      engine.value = 'auto';
+      refreshTesseractField();
+    }
   };
+  let statusSeq = 0;
+  let statusTimer: ReturnType<typeof setTimeout> | undefined;
+  const draftOcr = (): OcrSettings => ({
+    enabled: ocrEnabled.checked,
+    engine: engine.value as OcrEngineChoice,
+    language: ocrLanguage.value as OcrLanguage,
+    tesseractPath: draft.ocr.tesseractPath,
+  });
+  /** Asks for the status of the dialog's current (unsaved) choices; a newer call makes older answers stale. */
   const refreshStatus = (): void => {
-    ocrStatus()
+    const seq = ++statusSeq;
+    ocrStatus(draftOcr())
       .then((next) => {
+        if (seq !== statusSeq) return;
         status = next;
         renderStatus();
       })
       .catch((err: unknown) => {
+        if (seq !== statusSeq) return;
         console.warn('OCR status unavailable', err);
-        setText(statusList, '');
+        status = null;
+        const reason = typeof err === 'object' && err !== null && 'message' in err ? String((err as { message: unknown }).message) : String(err);
+        statusList.replaceChildren(h('li', {}, t('ocr.statusUnavailable', { error: reason })));
       });
+  };
+  const refreshStatusSoon = (): void => {
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(refreshStatus, 300);
   };
   const setProgress = (percent: number): void => {
     progress.value = percent;
@@ -220,6 +243,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
       if (picked) {
         draft.ocr.tesseractPath = picked;
         refreshTesseractField();
+        refreshStatusSoon();
       }
     } catch (err) {
       onError(err);
@@ -228,9 +252,13 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
   clearTesseract.addEventListener('click', () => {
     draft.ocr.tesseractPath = null;
     refreshTesseractField();
+    refreshStatusSoon();
   });
-  engine.addEventListener('change', refreshTesseractField);
-  ocrLanguage.addEventListener('change', renderStatus);
+  engine.addEventListener('change', () => {
+    refreshTesseractField();
+    refreshStatusSoon();
+  });
+  ocrLanguage.addEventListener('change', refreshStatusSoon);
   refreshTesseractField();
   refreshStatus();
 
@@ -315,6 +343,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
 
   cancel.addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => {
+    clearTimeout(statusTimer);
     if (downloading) cancelDownload().catch((err: unknown) => console.warn('cancel download failed', err));
     dialog.remove();
   });
@@ -324,12 +353,8 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     draft.workers = Number.isFinite(n) ? Math.min(MAX_WORKERS, Math.max(MIN_WORKERS, n)) : settings.workers;
     draft.extractImages = images.checked;
     draft.language = language.value as SettingsLanguage;
-    draft.ocr = {
-      enabled: ocrEnabled.checked,
-      engine: engine.value as OcrEngineChoice,
-      language: ocrLanguage.value as OcrLanguage,
-      tesseractPath: draft.ocr.tesseractPath,
-    };
+    if (engine.selectedOptions[0]?.disabled) engine.value = 'auto';
+    draft.ocr = draftOcr();
     save.disabled = true;
     setDialogError(errorLine, null);
     try {

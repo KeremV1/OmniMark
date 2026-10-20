@@ -176,8 +176,12 @@ export function installDevMock(): void {
             ],
             headingsTruncated: true,
           };
-        case 'ocr_status':
-          return OCR_STATUS;
+        case 'ocr_status': {
+          const draft = args.draft as Settings['ocr'] | null;
+          const engine = draft?.engine ?? settings.ocr.engine;
+          const selected = engine === 'tesseract' ? null : engine === 'ocrs' ? (OCR_STATUS.ocrsModels ? 'ocrs' : null) : OCR_STATUS.selected;
+          return { ...OCR_STATUS, selected };
+        }
         case 'download_ocr_models':
           return fakeDownload(args.onEvent as Channel<DownloadEvent>);
         case 'cancel_download':

@@ -183,8 +183,9 @@ export async function pickFolder(): Promise<string | null> {
   return picked ?? null;
 }
 
-export function ocrStatus(): Promise<OcrStatus> {
-  return invoke('ocr_status');
+/** `draft` = the dialog's unsaved OCR choices; omitted = the saved settings. */
+export function ocrStatus(draft?: OcrSettings): Promise<OcrStatus> {
+  return invoke('ocr_status', { draft: draft ?? null });
 }
 
 /** Resolves when the download ends (see the last event for the outcome); rejects with an `AppError` (for example `busy`). */
