@@ -76,6 +76,58 @@ impl OutputAllocator {
     }
 }
 
+impl OutputAllocator {
+    /// A unique folder name `<stem>` (then `<stem> (2)`, ...) for the contents of an archive.
+    pub fn allocate_dir(&self, source: &Path) -> PathBuf {
+        self.claim(&Self::stem_of(source), "")
+    }
+
+    /// A unique `<stem>-md.zip` file name for an archive's converted contents.
+    pub fn allocate_zip(&self, source: &Path) -> PathBuf {
+        self.claim(&format!("{}-md", Self::stem_of(source)), ".zip")
+    }
+
+    fn stem_of(source: &Path) -> String {
+        sanitize_stem(
+            &source
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        )
+    }
+
+    /// Reserves `<name><suffix>` (`name` = `base`, `base (2)`, ...) in the output folder.
+    fn claim(&self, base: &str, suffix: &str) -> PathBuf {
+        let mut reserved = self
+            .reserved
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let on_disk: HashSet<String> = std::fs::read_dir(&self.dir)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|e| e.file_name().to_string_lossy().to_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut n = 1u32;
+        loop {
+            let name = if n == 1 {
+                base.to_string()
+            } else {
+                format!("{base} ({n})")
+            };
+            let file_name = format!("{name}{suffix}");
+            let key = file_name.to_lowercase();
+            if !reserved.contains(&key) && !on_disk.contains(&key) {
+                reserved.insert(key);
+                return self.dir.join(file_name);
+            }
+            n += 1;
+        }
+    }
+}
+
 /// Replaces characters that are invalid in file names on Windows, macOS or Linux.
 pub fn sanitize_stem(stem: &str) -> String {
     let cleaned: String = stem
@@ -135,6 +187,30 @@ mod tests {
         std::fs::create_dir(tmp.path().join("x_assets")).unwrap();
         let target = OutputAllocator::new(tmp.path()).allocate(Path::new("x.pptx"));
         assert_eq!(target.markdown_path, tmp.path().join("x (2).md"));
+    }
+
+    #[test]
+    fn archive_folders_and_zips_get_unique_names_too() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("pack")).unwrap();
+        std::fs::write(tmp.path().join("pack-md.zip"), "old").unwrap();
+        let alloc = OutputAllocator::new(tmp.path());
+        assert_eq!(
+            alloc.allocate_dir(Path::new("in/pack.zip")),
+            tmp.path().join("pack (2)")
+        );
+        assert_eq!(
+            alloc.allocate_dir(Path::new("other/PACK.zip")),
+            tmp.path().join("PACK (3)")
+        );
+        assert_eq!(
+            alloc.allocate_zip(Path::new("in/pack.zip")),
+            tmp.path().join("pack-md (2).zip")
+        );
+        assert_eq!(
+            alloc.allocate_zip(Path::new("in/a:b.zip")),
+            tmp.path().join("a_b-md.zip")
+        );
     }
 
     #[test]

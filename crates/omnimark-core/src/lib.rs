@@ -14,6 +14,7 @@ pub mod ooxml;
 pub mod output;
 pub mod registry;
 pub mod xml;
+pub mod zip_output;
 
 pub use cancel::CancelToken;
 pub use document::{ConvertOptions, Document, DEFAULT_MAX_FILE_SIZE};
