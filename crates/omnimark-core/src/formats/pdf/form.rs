@@ -72,8 +72,8 @@ const HEURISTICS: FormHeuristics = FormHeuristics {
     min_cell_width: 3,
     min_run_fill: 0.5,
     min_run_rows: 2,
-    max_prose_gap_ratio: 2.0,
-    min_prose_row_share: 0.6,
+    max_prose_gap_ratio: 3.0,
+    min_prose_row_share: 0.5,
 };
 
 struct LineInfo<'a> {
