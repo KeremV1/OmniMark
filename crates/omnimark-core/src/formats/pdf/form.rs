@@ -44,6 +44,13 @@ struct FormHeuristics {
     /// Deviation from MarkItDown, on purpose: a run with fewer rows than this is not a
     /// table (a single aligned line is never a table).
     min_run_rows: usize,
+    /// Deviation from MarkItDown, on purpose: a row is "prose-like" when its largest gap
+    /// between consecutive words is at most this many times the row's font size. Justified
+    /// text has modest, even word gaps; real table columns are separated by much wider ones.
+    max_prose_gap_ratio: f32,
+    /// Deviation from MarkItDown, on purpose: a run whose share of prose-like rows is at
+    /// least this is justified text, not a table, and stays plain.
+    min_prose_row_share: f32,
 }
 
 const HEURISTICS: FormHeuristics = FormHeuristics {
@@ -65,6 +72,8 @@ const HEURISTICS: FormHeuristics = FormHeuristics {
     min_cell_width: 3,
     min_run_fill: 0.5,
     min_run_rows: 2,
+    max_prose_gap_ratio: 2.0,
+    min_prose_row_share: 0.6,
 };
 
 struct LineInfo<'a> {
@@ -187,7 +196,24 @@ fn is_real_table(rows: &[LineInfo<'_>], columns: &[f32]) -> bool {
     if columns_used == 0 {
         return false;
     }
-    non_empty as f32 / (rows.len() * columns_used) as f32 >= h.min_run_fill
+    if (non_empty as f32 / (rows.len() * columns_used) as f32) < h.min_run_fill {
+        return false;
+    }
+    let prose_rows = rows.iter().filter(|r| is_prose_like(r)).count();
+    (prose_rows as f32 / rows.len() as f32) < h.min_prose_row_share
+}
+
+/// True when the row's largest word gap is small relative to its font size.
+fn is_prose_like(row: &LineInfo<'_>) -> bool {
+    let mut sizes: Vec<f32> = row.words.iter().map(|w| w.size).collect();
+    sizes.sort_by(f32::total_cmp);
+    let size = sizes[sizes.len() / 2];
+    let max_gap = row
+        .words
+        .windows(2)
+        .map(|p| p[1].x0 - p[0].x1)
+        .fold(f32::MIN, f32::max);
+    max_gap <= HEURISTICS.max_prose_gap_ratio * size
 }
 
 fn build_lines(words: &[Word], page_width: f32) -> Vec<LineInfo<'_>> {
@@ -438,6 +464,35 @@ s0a s0b"
         assert_eq!(
             md.lines().filter(|l| l.starts_with("| ---")).count(),
             1,
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn justified_prose_run_is_rejected_and_wide_gap_table_kept() {
+        // Narrow words with 12 pt gaps (size 10 => ratio 1.2) in a 3-row run; the dense
+        // wide-gap table above it (gaps >= 50 pt) stays a table.
+        let mut words = Vec::new();
+        for top in [100.0, 115.0, 130.0] {
+            for (col, x) in [72.0, 200.0, 330.0, 460.0].iter().enumerate() {
+                words.push(w(&format!("t{col}"), *x, top));
+            }
+        }
+        words.push(w("Mid", 72.0, 160.0));
+        for top in [200.0, 215.0] {
+            for (k, x) in [72.0, 114.0, 156.0, 198.0].iter().enumerate() {
+                words.push(w(&format!("p{k}"), *x, top));
+            }
+        }
+        let md = extract_form_content(&words, 612.0).expect("form page");
+        assert!(md.contains("| t0"), "{md}");
+        assert!(
+            md.ends_with(
+                "
+Mid
+p0 p1 p2 p3
+p0 p1 p2 p3"
+            ),
             "{md}"
         );
     }
