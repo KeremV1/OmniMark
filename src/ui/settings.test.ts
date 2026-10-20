@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OcrStatus } from '../api';
-import { setLang } from '../i18n';
+import { loadLang } from '../i18n';
 import { formatMegabytes, ocrStatusLines, setDialogError } from './settings';
 
 describe('settings dialog error line', () => {
@@ -13,42 +13,27 @@ describe('settings dialog error line', () => {
   });
 });
 
-const base: OcrStatus = { windowsBuilt: true, windowsLanguages: ['tr'], tesseractPath: null, tesseractLanguages: [], ocrsBuilt: true, ocrsModels: false, ocrsDownloadBytes: 12_212_656, selected: 'windows', downloading: false };
+const windows: OcrStatus = { engine: 'windows', ready: true, needsDownload: false, ocrsDownloadBytes: 12_212_656, downloading: false };
 
 describe('OCR settings', () => {
   it('formats download sizes per language', () => {
     expect(formatMegabytes(12_212_656, 'tr')).toBe('12,2 MB');
     expect(formatMegabytes(12_212_656, 'en')).toBe('12.2 MB');
   });
-  it('describes engine status and warns about ocrs for Turkish', () => {
-    setLang('tr');
-    expect(ocrStatusLines(base, 'tr')).toEqual(['Windows OCR: tr hazır', 'Tesseract: kurulu değil (isteğe bağlı; Windows OCR yeterli)', 'ocrs: model indirilmedi']);
-    const withTesseract: OcrStatus = { ...base, tesseractPath: '/usr/bin/tesseract', tesseractLanguages: ['eng', 'tur'], selected: 'tesseract' };
-    expect(ocrStatusLines(withTesseract, 'tr')[1]).toBe('Tesseract: /usr/bin/tesseract (eng, tur)');
-    const ocrsOnly: OcrStatus = { ...base, windowsLanguages: [], ocrsModels: true, selected: 'ocrs' };
-    expect(ocrStatusLines(ocrsOnly, 'tr')).toEqual([
-      'Windows OCR: yüklü dil yok', 'Tesseract: kurulu değil (isteğe bağlı)', 'ocrs: model indirildi', 'ocrs Türkçe harfleri (ğ ş ı İ ç ö ü) tanımaz; Türkçe için önerilmez.',
-    ]);
-    setLang('en');
-    expect(ocrStatusLines({ ...base, windowsBuilt: false, selected: null }, 'en')).toEqual([
-      'Tesseract: not installed (optional)', 'ocrs: model not downloaded', 'No OCR engine is available; files convert without OCR.',
-    ]);
+
+  it('describes the engine that will run', async () => {
+    await loadLang('en');
+    expect(ocrStatusLines(windows)).toEqual(['Windows OCR will be used (ready).']);
+    const ready: OcrStatus = { ...windows, engine: 'ocrs' };
+    expect(ocrStatusLines(ready)).toEqual(['The built-in ocrs engine will be used (ready).', 'ocrs reads Latin-script text (English-focused).']);
+    const missing: OcrStatus = { ...ready, ready: false, needsDownload: true };
+    expect(ocrStatusLines(missing)[0]).toBe('The built-in ocrs engine will be used; its model must be downloaded first.');
+    expect(ocrStatusLines({ ...windows, engine: null, ready: false })).toEqual(['No OCR engine is available; files convert without OCR.']);
   });
-  it('says the selected engine is unavailable only when another engine is ready', () => {
-    setLang('en');
-    const selectedMissing: OcrStatus = { ...base, selected: null };
-    expect(ocrStatusLines(selectedMissing, 'en')).toContain("The selected engine is not available; choose 'Automatic' or install it.");
-    expect(ocrStatusLines(selectedMissing, 'en').join()).not.toContain('No OCR engine');
-    const nothing: OcrStatus = { ...base, windowsLanguages: [], selected: null };
-    expect(ocrStatusLines(nothing, 'en')).toContain('No OCR engine is available; files convert without OCR.');
-    setLang('tr');
-    expect(ocrStatusLines(selectedMissing, 'tr')).toContain("Seçili motor kullanılamıyor; 'Otomatik'i seçin ya da motoru kurun.");
-  });
-  it('words the missing Tesseract line per platform', () => {
-    setLang('en');
-    expect(ocrStatusLines(base, 'en')[1]).toBe('Tesseract: not installed (optional; Windows OCR covers it)');
-    expect(ocrStatusLines({ ...base, windowsBuilt: false }, 'en')[0]).toBe('Tesseract: not installed (optional)');
-    // Windows OCR built but without a language pack cannot "cover it".
-    expect(ocrStatusLines({ ...base, windowsLanguages: [] }, 'en')[1]).toBe('Tesseract: not installed (optional)');
+
+  it('is translated', async () => {
+    await loadLang('tr');
+    expect(ocrStatusLines(windows)).toEqual(['Windows OCR kullanılacak (hazır).']);
+    expect(ocrStatusLines({ ...windows, engine: 'ocrs' })).toHaveLength(2);
   });
 });

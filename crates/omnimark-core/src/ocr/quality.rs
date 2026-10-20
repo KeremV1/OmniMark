@@ -1,5 +1,5 @@
 //! OCR quality spike (Task M2-3): character error rate (CER) and time of each available engine
-//! (Windows, Tesseract with `tur`/`eng` when installed, ocrs) on
+//! (Windows, ocrs) on
 //! generated Turkish/English text and on the page image of `pdf_scanned_minimal.pdf`. Manual:
 //! `cargo test -p omnimark-core --release --features ocr,ocr-windows ocr::quality -- --ignored --nocapture`
 //! with `OMNIMARK_OCR_MODELS` set for ocrs; Windows OCR runs when a language is installed.
@@ -95,16 +95,6 @@ fn engines() -> Vec<Box<dyn OcrEngine>> {
             engines.push(Box::new(engine));
         }
         Err(error) => println!("windows: {error}"),
-    }
-    match super::tesseract_engine::resolve_path(None)
-        .map(super::tesseract_engine::TesseractEngine::new)
-    {
-        Some(Ok(engine)) => {
-            println!("tesseract languages: {:?}", engine.languages());
-            engines.push(Box::new(engine));
-        }
-        Some(Err(error)) => println!("tesseract: {error}"),
-        None => println!("tesseract: not installed on this machine"),
     }
     #[cfg(feature = "ocr")]
     if let Some(root) = std::env::var_os("OMNIMARK_OCR_MODELS") {

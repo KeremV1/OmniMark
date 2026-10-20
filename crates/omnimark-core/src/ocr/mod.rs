@@ -1,7 +1,6 @@
 //! Optional text recognition (OCR): the engine interface, image preparation, the per-document
 //! cache and the Markdown blocks. Real engines live behind the `ocr` (ocrs) and `ocr-windows`
-//! (Windows.Media.Ocr) Cargo features; the Tesseract engine runs an installed program and needs
-//! no feature. With `ConvertOptions::ocr == None` nothing here runs.
+//! (Windows.Media.Ocr) Cargo features. With `ConvertOptions::ocr == None` nothing here runs.
 
 mod block;
 mod cache;
@@ -15,7 +14,6 @@ pub mod models;
 pub mod ocrs_engine;
 #[cfg(test)]
 mod quality;
-pub mod tesseract_engine;
 #[cfg(test)]
 pub(crate) mod test_render;
 #[cfg(all(windows, feature = "ocr-windows"))]
@@ -35,7 +33,6 @@ pub use decode::{
 pub use doc::{clean_text, DocumentOcr, DECODE_WARNING, MAX_OCR_IMAGES, OCR_LIMIT_WARNING};
 pub use mock::{MockEngine, MOCK_TEXT};
 
-use crate::cancel::CancelToken;
 use serde::{Deserialize, Serialize};
 
 /// A text recognizer. Created once per batch and shared by the worker threads.
@@ -45,18 +42,6 @@ pub trait OcrEngine: Send + Sync {
 
     /// Text of one prepared image, lines separated by `\n`.
     fn recognize(&self, image: &OcrImage, language: &OcrLanguage) -> Result<String, OcrError>;
-
-    /// Like [`recognize`](Self::recognize), but engines that run long external work (Tesseract)
-    /// stop early with [`OcrError::Cancelled`] once `cancel` fires. In-process engines finish
-    /// the single image: [`DocumentOcr`] checks the token before the next one.
-    fn recognize_cancellable(
-        &self,
-        image: &OcrImage,
-        language: &OcrLanguage,
-        _cancel: &CancelToken,
-    ) -> Result<String, OcrError> {
-        self.recognize(image, language)
-    }
 }
 
 /// Recognition language.

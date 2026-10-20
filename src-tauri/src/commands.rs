@@ -4,7 +4,7 @@ use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
 use omnimark_core::ocr::models::{fetch_ocrs, ocrs_download_size, DownloadError};
-use omnimark_core::ocr::{availability, build_engine, select, Availability, EngineKind};
+use omnimark_core::ocr::{availability, build_engine, select, Availability, EngineKind, OcrChoice};
 use omnimark_core::{CancelToken, ConvertOptions};
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -14,7 +14,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::error::AppError;
 use crate::inspect::{inspect, InspectResult};
 use crate::jobs::{run_batch, BatchRequest, ConvertEvent};
-use crate::settings::{effective_ocr_language, OcrSettings, Settings};
+use crate::settings::Settings;
 use crate::AppState;
 
 /// Largest dropped selection (files after folder expansion) handled in one go.
@@ -82,12 +82,8 @@ pub async fn convert(
         // One engine per batch, built here (never at startup) and dropped with `request`.
         if settings.ocr.enabled {
             let config = settings.engine_config(&models_root);
-            let kind = select(settings.ocr.engine, &availability(&config));
-            match build_engine(settings.ocr.engine, &config) {
-                Ok(engine) => {
-                    options.ocr = Some(engine);
-                    options.ocr_language = effective_ocr_language(&settings, kind);
-                }
+            match build_engine(OcrChoice::Auto, &config) {
+                Ok(engine) => options.ocr = Some(engine),
                 Err(e) => ocr_warning = Some(format!("OCR was skipped: {e}.")),
             }
         }
@@ -420,14 +416,33 @@ pub fn set_settings(
     Ok(settings)
 }
 
+/// What the settings dialog needs to know about OCR.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OcrStatus {
-    #[serde(flatten)]
-    pub availability: Availability,
+    /// The engine OCR will use; `None` when this build has none.
+    pub engine: Option<EngineKind>,
+    /// The engine can run now.
+    pub ready: bool,
+    /// ocrs is the engine and its models are not downloaded yet.
+    pub needs_download: bool,
     pub ocrs_download_bytes: u64,
-    pub selected: Option<EngineKind>,
     pub downloading: bool,
+}
+
+impl OcrStatus {
+    /// Windows OCR when it has a language, else ocrs (which may still need its models).
+    fn new(availability: &Availability, ocrs_download_bytes: u64, downloading: bool) -> Self {
+        let selected = select(OcrChoice::Auto, availability);
+        let engine = selected.or(availability.ocrs_built.then_some(EngineKind::Ocrs));
+        Self {
+            engine,
+            ready: selected.is_some(),
+            needs_download: engine == Some(EngineKind::Ocrs) && selected.is_none(),
+            ocrs_download_bytes,
+            downloading,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -444,29 +459,15 @@ pub enum DownloadEvent {
     Cancelled,
 }
 
-/// Which engines this machine offers; asks Windows and runs `tesseract`, so off the UI thread.
+/// Which engine OCR will use and whether it is ready; asks Windows, so off the UI thread.
 #[tauri::command]
-pub async fn ocr_status(
-    state: State<'_, AppState>,
-    draft: Option<OcrSettings>,
-) -> Result<OcrStatus, AppError> {
-    let mut settings = current_settings(&state);
-    // The settings dialog passes its unsaved choices so the status follows them.
-    if let Some(draft) = draft {
-        settings.ocr = draft;
-        settings = settings.sanitized(&state.default_output_dir);
-    }
+pub async fn ocr_status(state: State<'_, AppState>) -> Result<OcrStatus, AppError> {
+    let settings = current_settings(&state);
     let models_root = state.models_root.clone();
     let downloading = lock(&state.downloading).is_some();
     tauri::async_runtime::spawn_blocking(move || {
         let availability = availability(&settings.engine_config(&models_root));
-        let selected = select(settings.ocr.engine, &availability);
-        OcrStatus {
-            availability,
-            ocrs_download_bytes: ocrs_download_size(),
-            selected,
-            downloading,
-        }
+        OcrStatus::new(&availability, ocrs_download_size(), downloading)
     })
     .await
     .map_err(|e| AppError::Tauri(e.to_string()))
@@ -575,17 +576,37 @@ mod tests {
             serde_json::to_value(DownloadEvent::Finished).unwrap(),
             serde_json::json!({"event": "finished"})
         );
-        let status = OcrStatus {
-            availability: Availability::default(),
-            ocrs_download_bytes: 5,
-            selected: Some(EngineKind::Ocrs),
-            downloading: false,
-        };
-        let json = serde_json::to_value(status).unwrap();
-        assert_eq!(json["selected"], "ocrs");
-        assert_eq!(json["windowsLanguages"], serde_json::json!([]));
-        assert_eq!(json["tesseractPath"], serde_json::Value::Null);
-        assert_eq!(json["tesseractLanguages"], serde_json::json!([]));
+    }
+
+    fn available(windows: bool, ocrs_built: bool, ocrs_models: bool) -> Availability {
+        Availability {
+            windows_built: true,
+            windows_languages: if windows {
+                vec!["en-US".into()]
+            } else {
+                vec![]
+            },
+            ocrs_built,
+            ocrs_models,
+        }
+    }
+
+    #[test]
+    fn ocr_status_reports_engine_readiness_and_download_need() {
+        let windows = OcrStatus::new(&available(true, true, false), 5, false);
+        assert_eq!(windows.engine, Some(EngineKind::Windows));
+        assert!(windows.ready && !windows.needs_download);
+        let missing = OcrStatus::new(&available(false, true, false), 5, false);
+        assert_eq!(missing.engine, Some(EngineKind::Ocrs));
+        assert!(!missing.ready && missing.needs_download);
+        let ocrs = OcrStatus::new(&available(false, true, true), 5, false);
+        assert!(ocrs.ready && !ocrs.needs_download);
+        let none = OcrStatus::new(&available(false, false, false), 5, false);
+        assert_eq!(none.engine, None);
+        assert!(!none.ready && !none.needs_download);
+        let json = serde_json::to_value(missing).unwrap();
+        assert_eq!(json["engine"], "ocrs");
+        assert_eq!(json["needsDownload"], true);
         assert_eq!(json["ocrsDownloadBytes"], 5);
     }
 

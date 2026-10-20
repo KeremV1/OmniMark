@@ -1,296 +1,101 @@
 import type { SettingsLanguage } from './api';
+import { en, type MessageKey, type Messages } from './locales/en';
 
-export type Lang = 'tr' | 'en';
+export type { MessageKey, Messages };
 
-const tr = {
-  'app.title': 'OmniMark',
-  'action.addFiles': 'Dosya ekle',
-  'action.addFolder': 'Klasör ekle',
-  'action.remove': 'Kaldır',
-  'action.convertCount': 'Markdown Oluştur ({n})',
-  'action.cancel': 'İptal',
-  'action.cancelRun': 'Dönüştürmeyi iptal et',
-  'action.change': 'Değiştir',
-  'action.preview': 'Önizle',
-  'action.details': 'Ayrıntılar',
-  'action.reveal': 'Klasörde göster',
-  'action.retry': 'Yeniden dene',
-  'action.openFolder': 'Çıktı klasörünü aç',
-  'action.copy': 'Kopyala',
-  'action.settings': 'Ayarlar',
-  'action.close': 'Kapat',
-  'drop.hint': 'Dosyaları buraya bırakın',
-  'drop.active': 'Bırakın, kuyruğa ekleyelim',
-  'output.label': 'Çıktı klasörü',
-  'filter.all': 'Tümü',
-  'filter.done': 'Tamamlanan',
-  'filter.failed': 'Başarısız',
-  'filter.pending': 'Bekleyen',
-  'status.pending': 'Bekliyor',
-  'status.converting': 'Dönüştürülüyor',
-  'status.done': 'Tamamlandı',
-  'status.failed': 'Başarısız',
-  'status.cancelled': 'İptal edildi',
-  'status.unsupported': 'Desteklenmiyor',
-  'status.unsupportedLater': 'Henüz desteklenmiyor, sonraki sürümde gelecek',
-  'preview.view': 'Görünüm',
-  'preview.source': 'Kaynak',
-  'preview.truncated': "Belgenin ilk {shown} gösteriliyor (toplam {total})",
-  'preview.outline': 'Başlıklar',
-  'preview.outlineMore': '+ daha fazla',
-  'preview.outlineBeyond': 'Önizlemenin dışında; dosyanın tamamında bulunur',
-  'action.openDefault': 'Varsayılan uygulamada aç',
-  'settings.outputDir': 'Çıktı klasörü',
-  'settings.extractImages': 'Görselleri ayıkla',
-  'settings.workers': 'Eşzamanlı dönüşüm sayısı',
-  'settings.language': 'Dil',
-  'settings.languageAuto': 'Sistem',
-  'settings.openLogs': 'Günlük klasörünü aç',
-  'settings.about': 'Hakkında',
-  'settings.license': 'MIT Lisansı',
-  'notice.truncated': 'Çok fazla dosya seçildi; yalnızca ilk {n} dosya eklendi.',
-  'error.unsupported': 'Bu dosya türü desteklenmiyor.',
-  'error.corrupt': 'Dosya bozuk veya okunamıyor.',
-  'error.encrypted': 'Dosya parola korumalı.',
-  'error.tooLarge': 'Dosya çok büyük.',
-  'error.cancelled': 'İşlem iptal edildi.',
-  'error.io': 'Dosya okunamadı veya yazılamadı.',
-  'error.missingComponent': 'Gerekli bileşen eksik.',
-  'error.busy': 'Başka bir dönüşüm sürüyor.',
-  'error.invalidPath': 'Geçersiz dosya yolu.',
-  'action.save': 'Kaydet',
-  'action.copied': 'Kopyalandı',
-  'action.more': 'Diğer işlemler',
-  'action.showFile': 'Dosyayı göster',
-  'action.removeFromList': 'Listeden kaldır',
-  'dialog.allFiles': 'Tüm dosyalar',
-  'drop.formats': 'PDF, Word, Excel, PowerPoint, HTML, CSV, metin ve JSON dosyaları Markdown’a çevrilir.',
-  'drop.orAdd': 'ya da',
-  'output.short': 'Çıktı',
-  'list.label': 'Dönüştürülecek dosyalar',
-  'list.selectAll': 'Tümünü seç',
-  'list.select': '{name} dosyasını seç',
-  'list.name': 'Ad',
-  'list.kind': 'Tür',
-  'list.size': 'Boyut',
-  'list.status': 'Durum',
-  'list.noMatch': 'Bu filtreye uyan dosya yok.',
-  'filter.label': 'Listeyi süz',
-  'status.percent': '%{n}',
-  'status.warnings': '{n} uyarı',
-  'status.warning1': '1 uyarı',
-  'preview.label': 'Önizleme',
-  'preview.empty': 'Bu dosyadan boş bir Markdown çıktı.',
-  'details.file': 'Dosya',
-  'details.output': 'Çıktı',
-  'details.message': 'Hata iletisi',
-  'details.warnings': 'Uyarılar',
-  'details.none': 'Uyarı yok.',
-  'settings.extractImagesHint': 'Belgelerdeki görseller <ad>_assets klasörüne kaydedilir.',
-  'settings.workersHint': 'Aynı anda dönüştürülecek dosya sayısı (1-8).',
-  'settings.languageTr': 'Türkçe',
-  'settings.languageEn': 'English',
-  'settings.ocr': 'Metin tanıma (OCR)',
-  'settings.ocrEnabled': 'Görsellerdeki metni oku',
-  'settings.ocrEnabledHint': "Taranmış PDF'ler, görsel dosyaları ve belgelerdeki görseller için. Dönüşümü yavaşlatır.",
-  'settings.ocrEngine': 'Motor',
-  'settings.ocrEngineAuto': 'Otomatik',
-  'settings.ocrEngineWindows': 'Windows yerleşik',
-  'settings.ocrEngineTesseract': 'Tesseract (sistemde kurulu)',
-  'settings.ocrEngineOcrs': 'ocrs (indirilen model)',
-  'settings.tesseractPath': 'Tesseract programı',
-  'settings.tesseractPathAuto': 'Otomatik bulunur',
-  'settings.tesseractChoose': 'Seç…',
-  'settings.tesseractClear': 'Temizle',
-  'settings.ocrLanguage': 'Tanıma dili',
-  'settings.ocrLanguageAuto': 'Otomatik (arayüz dili)',
-  'ocr.statusLoading': 'Durum denetleniyor…',
-  'ocr.statusUnavailable': 'OCR durumu alınamadı: {error}',
-  'ocr.windowsReady': 'Windows OCR: {langs} hazır',
-  'ocr.windowsNoLanguage': 'Windows OCR: yüklü dil yok',
-  'ocr.tesseractReady': 'Tesseract: {path} ({langs})',
-  'ocr.tesseractMissing': 'Tesseract: kurulu değil (isteğe bağlı)',
-  'ocr.tesseractOptional': 'Tesseract: kurulu değil (isteğe bağlı; Windows OCR yeterli)',
-  'ocr.tesseractInstallHint': 'macOS: brew install tesseract tesseract-lang · Linux: sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-tur',
-  'ocr.selectedUnavailable': "Seçili motor kullanılamıyor; 'Otomatik'i seçin ya da motoru kurun.",
-  'ocr.tesseractInstall': "Tesseract'ı kur",
-  'ocr.ocrsReady': 'ocrs: model indirildi',
-  'ocr.ocrsMissing': 'ocrs: model indirilmedi',
-  'ocr.none': "Kullanılabilir OCR motoru yok; dosyalar OCR'sız dönüştürülür.",
-  'ocr.ocrsTurkish': 'ocrs Türkçe harfleri (ğ ş ı İ ç ö ü) tanımaz; Türkçe için önerilmez.',
-  'ocr.download': 'Modeli indir (~{size})',
-  'ocr.downloading': 'İndiriliyor… %{percent}',
-  'ocr.downloadCancel': 'İndirmeyi durdur',
-  'ocr.downloadFailed': 'İndirme başarısız: {message}',
-  'error.generic': 'İşlem tamamlanamadı.',
-  'kind.pdf': 'PDF',
-  'kind.word': 'Word',
-  'kind.excel': 'Excel',
-  'kind.powerPoint': 'PowerPoint',
-  'kind.html': 'HTML',
-  'kind.csv': 'CSV',
-  'kind.text': 'Metin',
-  'kind.json': 'JSON',
-  'kind.image': 'Görsel',
-  'kind.audio': 'Ses',
-  'kind.unknown': 'Bilinmiyor',
-} as const;
+/** Interface languages; every value is a valid BCP-47 tag. English is the default and the fallback. */
+export const LANGS = ['en', 'tr', 'ru', 'de', 'es', 'fr', 'pt-BR'] as const;
+export type Lang = (typeof LANGS)[number];
 
-export type MessageKey = keyof typeof tr;
-
-const en: Record<MessageKey, string> = {
-  'app.title': 'OmniMark',
-  'action.addFiles': 'Add files',
-  'action.addFolder': 'Add folder',
-  'action.remove': 'Remove',
-  'action.convertCount': 'Create Markdown ({n})',
-  'action.cancel': 'Cancel',
-  'action.cancelRun': 'Cancel conversion',
-  'action.change': 'Change',
-  'action.preview': 'Preview',
-  'action.details': 'Details',
-  'action.reveal': 'Show in folder',
-  'action.retry': 'Retry',
-  'action.openFolder': 'Open output folder',
-  'action.copy': 'Copy',
-  'action.settings': 'Settings',
-  'action.close': 'Close',
-  'drop.hint': 'Drop files here',
-  'drop.active': 'Release to add to the queue',
-  'output.label': 'Output folder',
-  'filter.all': 'All',
-  'filter.done': 'Done',
-  'filter.failed': 'Failed',
-  'filter.pending': 'Pending',
-  'status.pending': 'Pending',
-  'status.converting': 'Converting',
-  'status.done': 'Done',
-  'status.failed': 'Failed',
-  'status.cancelled': 'Cancelled',
-  'status.unsupported': 'Unsupported',
-  'status.unsupportedLater': 'Not supported yet, coming in a later version',
-  'preview.view': 'View',
-  'preview.source': 'Source',
-  'preview.truncated': 'Showing the first {shown} of {total}',
-  'preview.outline': 'Headings',
-  'preview.outlineMore': '+ more',
-  'preview.outlineBeyond': 'Beyond the preview; found in the full file',
-  'action.openDefault': 'Open in default app',
-  'settings.outputDir': 'Output folder',
-  'settings.extractImages': 'Extract images',
-  'settings.workers': 'Parallel conversions',
-  'settings.language': 'Language',
-  'settings.languageAuto': 'System',
-  'settings.openLogs': 'Open log folder',
-  'settings.about': 'About',
-  'settings.license': 'MIT License',
-  'notice.truncated': 'Too many files selected; only the first {n} were added.',
-  'error.unsupported': 'This file type is not supported.',
-  'error.corrupt': 'The file is corrupt or unreadable.',
-  'error.encrypted': 'The file is password protected.',
-  'error.tooLarge': 'The file is too large.',
-  'error.cancelled': 'The operation was cancelled.',
-  'error.io': 'The file could not be read or written.',
-  'error.missingComponent': 'A required component is missing.',
-  'error.busy': 'Another conversion is already running.',
-  'error.invalidPath': 'Invalid file path.',
-  'action.save': 'Save',
-  'action.copied': 'Copied',
-  'action.more': 'More actions',
-  'action.showFile': 'Show file',
-  'action.removeFromList': 'Remove from list',
-  'dialog.allFiles': 'All files',
-  'drop.formats': 'PDF, Word, Excel, PowerPoint, HTML, CSV, text and JSON files become Markdown.',
-  'drop.orAdd': 'or',
-  'output.short': 'Output',
-  'list.label': 'Files to convert',
-  'list.selectAll': 'Select all',
-  'list.select': 'Select {name}',
-  'list.name': 'Name',
-  'list.kind': 'Type',
-  'list.size': 'Size',
-  'list.status': 'Status',
-  'list.noMatch': 'No files match this filter.',
-  'filter.label': 'Filter the list',
-  'status.percent': '{n}%',
-  'status.warnings': '{n} warnings',
-  'status.warning1': '1 warning',
-  'preview.label': 'Preview',
-  'preview.empty': 'This file produced an empty Markdown file.',
-  'details.file': 'File',
-  'details.output': 'Output',
-  'details.message': 'Error message',
-  'details.warnings': 'Warnings',
-  'details.none': 'No warnings.',
-  'settings.extractImagesHint': 'Images in documents are saved to a <name>_assets folder.',
-  'settings.workersHint': 'How many files convert at the same time (1-8).',
-  'settings.languageTr': 'Türkçe',
-  'settings.languageEn': 'English',
-  'settings.ocr': 'Text recognition (OCR)',
-  'settings.ocrEnabled': 'Read text in images',
-  'settings.ocrEnabledHint': 'For scanned PDFs, image files and pictures in documents. Makes conversion slower.',
-  'settings.ocrEngine': 'Engine',
-  'settings.ocrEngineAuto': 'Automatic',
-  'settings.ocrEngineWindows': 'Windows built-in',
-  'settings.ocrEngineTesseract': 'Tesseract (installed on this system)',
-  'settings.ocrEngineOcrs': 'ocrs (downloaded model)',
-  'settings.tesseractPath': 'Tesseract program',
-  'settings.tesseractPathAuto': 'Found automatically',
-  'settings.tesseractChoose': 'Choose…',
-  'settings.tesseractClear': 'Clear',
-  'settings.ocrLanguage': 'Recognition language',
-  'settings.ocrLanguageAuto': 'Automatic (interface language)',
-  'ocr.statusLoading': 'Checking…',
-  'ocr.statusUnavailable': 'Could not read OCR status: {error}',
-  'ocr.windowsReady': 'Windows OCR: {langs} ready',
-  'ocr.windowsNoLanguage': 'Windows OCR: no language installed',
-  'ocr.tesseractReady': 'Tesseract: {path} ({langs})',
-  'ocr.tesseractMissing': 'Tesseract: not installed (optional)',
-  'ocr.tesseractOptional': 'Tesseract: not installed (optional; Windows OCR covers it)',
-  'ocr.tesseractInstallHint': 'macOS: brew install tesseract tesseract-lang · Linux: sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-tur',
-  'ocr.selectedUnavailable': "The selected engine is not available; choose 'Automatic' or install it.",
-  'ocr.tesseractInstall': 'Install Tesseract',
-  'ocr.ocrsReady': 'ocrs: model downloaded',
-  'ocr.ocrsMissing': 'ocrs: model not downloaded',
-  'ocr.none': 'No OCR engine is available; files convert without OCR.',
-  'ocr.ocrsTurkish': 'ocrs cannot read Turkish letters (ğ ş ı İ ç ö ü); not recommended for Turkish.',
-  'ocr.download': 'Download model (~{size})',
-  'ocr.downloading': 'Downloading… {percent}%',
-  'ocr.downloadCancel': 'Stop download',
-  'ocr.downloadFailed': 'Download failed: {message}',
-  'error.generic': 'The action could not be completed.',
-  'kind.pdf': 'PDF',
-  'kind.word': 'Word',
-  'kind.excel': 'Excel',
-  'kind.powerPoint': 'PowerPoint',
-  'kind.html': 'HTML',
-  'kind.csv': 'CSV',
-  'kind.text': 'Text',
-  'kind.json': 'JSON',
-  'kind.image': 'Image',
-  'kind.audio': 'Audio',
-  'kind.unknown': 'Unknown',
+/** Each language shown by its own name (settings language select). */
+export const LANGUAGE_NAMES: Record<Lang, string> = {
+  en: 'English',
+  tr: 'Türkçe',
+  ru: 'Русский',
+  de: 'Deutsch',
+  es: 'Español',
+  fr: 'Français',
+  'pt-BR': 'Português (Brasil)',
 };
 
-export const messages: Record<Lang, Record<MessageKey, string>> = { tr, en };
+/** English is bundled; every other locale is a separate chunk fetched on demand. */
+const loaders: Record<Exclude<Lang, 'en'>, () => Promise<{ default: Messages }>> = {
+  tr: () => import('./locales/tr'),
+  ru: () => import('./locales/ru'),
+  de: () => import('./locales/de'),
+  es: () => import('./locales/es'),
+  fr: () => import('./locales/fr'),
+  'pt-BR': () => import('./locales/pt-BR'),
+};
 
-let current: Lang = 'tr';
+const loaded: Partial<Record<Lang, Messages>> = { en };
 
-export function resolveLang(setting: SettingsLanguage, navigatorLanguage: string): Lang {
-  if (setting === 'tr' || setting === 'en') return setting;
-  return navigatorLanguage.toLowerCase().startsWith('tr') ? 'tr' : 'en';
+let current: Lang = 'en';
+
+export function isLang(value: string): value is Lang {
+  return (LANGS as readonly string[]).includes(value);
 }
 
-export function setLang(lang: Lang): void {
+/** Maps a BCP-47 tag (`de-AT`, `pt-PT`, `ru`) to a supported language, or undefined. */
+export function matchLang(tag: string): Lang | undefined {
+  const primary = tag.toLowerCase().split(/[-_]/)[0];
+  switch (primary) {
+    case 'tr':
+    case 'ru':
+    case 'de':
+    case 'es':
+    case 'fr':
+      return primary;
+    case 'pt':
+      return 'pt-BR';
+    case 'en':
+      return 'en';
+    default:
+      return undefined;
+  }
+}
+
+/** The explicit setting wins; `auto` takes the first supported system language, else English. */
+export function resolveLang(setting: SettingsLanguage, systemLanguages: string | readonly string[]): Lang {
+  if (setting !== 'auto' && isLang(setting)) return setting;
+  const tags = typeof systemLanguages === 'string' ? [systemLanguages] : systemLanguages;
+  for (const tag of tags) {
+    const lang = matchLang(tag);
+    if (lang) return lang;
+  }
+  return 'en';
+}
+
+/** Fetches the locale if needed and makes it the active one. A failed fetch falls back to English. */
+export async function loadLang(lang: Lang): Promise<Lang> {
+  if (!loaded[lang] && lang !== 'en') {
+    try {
+      loaded[lang] = (await loaders[lang]()).default;
+    } catch (err) {
+      console.error(`could not load locale ${lang}`, err);
+      current = 'en';
+      return current;
+    }
+  }
   current = lang;
+  return current;
+}
+
+/** Switches to an already loaded language (English is always loaded); otherwise to English. */
+export function setLang(lang: Lang): void {
+  current = loaded[lang] ? lang : 'en';
 }
 
 export function getLang(): Lang {
   return current;
 }
 
+export function hasMessage(key: string): key is MessageKey {
+  return key in en;
+}
+
 export function t(key: MessageKey, vars?: Record<string, string | number>): string {
-  const text = messages[current][key];
+  const text = loaded[current]?.[key] ?? en[key];
   if (!vars) return text;
   return text.replace(/\{(\w+)\}/g, (m, name: string) => (name in vars ? String(vars[name]) : m));
 }

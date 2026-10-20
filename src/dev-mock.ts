@@ -4,11 +4,12 @@
  *
  * `?scenario=` picks a screen for screenshots: `queue` (default), `empty`, `drag`,
  * `idle` (files added, nothing converted), `preview`, `settings`, `details`, `menu`.
- * `&lang=en|tr` forces the UI language.
+ * `&lang=en|tr|ru|de|es|fr|pt-BR` forces the UI language.
  */
 import type { Channel } from '@tauri-apps/api/core';
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import type { ConvertEvent, DownloadEvent, FileEntry, OcrStatus, Settings } from './api';
+import { isLang } from './i18n';
 import type { Actions } from './ui/context';
 
 const DIR = 'C:\\Users\\Kerem\\Documents\\Raporlar';
@@ -53,8 +54,8 @@ let settings: Settings = {
   outputDir: OUT,
   extractImages: true,
   workers: 2,
-  language: forcedLang === 'en' || forcedLang === 'tr' ? forcedLang : 'auto',
-  ocr: { enabled: false, engine: 'auto', language: 'auto', tesseractPath: null },
+  language: forcedLang && isLang(forcedLang) ? forcedLang : 'auto',
+  ocr: { enabled: false },
 };
 let cancelDownload = false;
 let cancelRun: (() => void) | null = null;
@@ -127,14 +128,10 @@ async function fakeDownload(channel: Channel<DownloadEvent>): Promise<void> {
 }
 
 const OCR_STATUS: OcrStatus = {
-  windowsBuilt: true,
-  windowsLanguages: ['tr'],
-  tesseractPath: null,
-  tesseractLanguages: [],
-  ocrsBuilt: true,
-  ocrsModels: false,
+  engine: 'ocrs',
+  ready: false,
+  needsDownload: true,
   ocrsDownloadBytes: 12_212_656,
-  selected: 'windows',
   downloading: false,
 };
 
@@ -176,12 +173,8 @@ export function installDevMock(): void {
             ],
             headingsTruncated: true,
           };
-        case 'ocr_status': {
-          const draft = args.draft as Settings['ocr'] | null;
-          const engine = draft?.engine ?? settings.ocr.engine;
-          const selected = engine === 'tesseract' ? null : engine === 'ocrs' ? (OCR_STATUS.ocrsModels ? 'ocrs' : null) : OCR_STATUS.selected;
-          return { ...OCR_STATUS, selected };
-        }
+        case 'ocr_status':
+          return OCR_STATUS;
         case 'download_ocr_models':
           return fakeDownload(args.onEvent as Channel<DownloadEvent>);
         case 'cancel_download':
