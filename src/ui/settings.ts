@@ -50,10 +50,16 @@ export function ocrStatusLines(status: OcrStatus, language: 'tr' | 'en' | 'auto'
   lines.push(
     status.tesseractPath && status.tesseractLanguages.length > 0
       ? t('ocr.tesseractReady', { path: status.tesseractPath, langs: status.tesseractLanguages.join(', ') })
-      : t('ocr.tesseractMissing'),
+      : t(status.windowsBuilt ? 'ocr.tesseractOptional' : 'ocr.tesseractMissing'),
   );
   if (status.ocrsBuilt) lines.push(t(status.ocrsModels ? 'ocr.ocrsReady' : 'ocr.ocrsMissing'));
-  if (status.selected === null) lines.push(t('ocr.none'));
+  if (status.selected === null) {
+    const anyAvailable =
+      (status.windowsBuilt && status.windowsLanguages.length > 0) ||
+      (status.tesseractPath !== null && status.tesseractLanguages.length > 0) ||
+      (status.ocrsBuilt && status.ocrsModels);
+    lines.push(t(anyAvailable ? 'ocr.selectedUnavailable' : 'ocr.none'));
+  }
   if (status.selected === 'ocrs' && language === 'tr') lines.push(t('ocr.ocrsTurkish'));
   return lines;
 }
@@ -157,6 +163,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     setDialogError(errorLine, null);
     openTesseractPage().catch(onError);
   });
+  const installHint = h('small', { class: 'hint', hidden: true }, t('ocr.tesseractInstallHint'));
   const downloadButton = h('button', { class: 'btn btn-small', type: 'button', hidden: true }) as HTMLButtonElement;
   const progress = h('progress', { max: 100, value: 0, 'aria-label': t('settings.ocr') }) as HTMLProgressElement;
   const progressText = h('span', { class: 'ocr-progress-text' });
@@ -169,7 +176,10 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
   const renderStatus = (): void => {
     if (!status) return;
     statusList.replaceChildren(...ocrStatusLines(status, resolvedOcrLanguage()).map((line) => h('li', {}, line)));
-    installLink.hidden = status.tesseractPath !== null && status.tesseractLanguages.length > 0;
+    // Tesseract is optional; on Windows the built-in OCR covers it, so no install prompt there.
+    const showInstall = !status.windowsBuilt && !(status.tesseractPath !== null && status.tesseractLanguages.length > 0);
+    installLink.hidden = !showInstall;
+    installHint.hidden = !showInstall;
     const needsModel = status.ocrsBuilt && !status.ocrsModels;
     downloadButton.hidden = !needsModel || downloading;
     progressRow.hidden = !downloading;
@@ -275,7 +285,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     h('div', { class: 'field field-inline' }, h('label', { for: 'set-ocr-engine' }, t('settings.ocrEngine')), engine),
     tesseractField,
     h('div', { class: 'field field-inline' }, h('label', { for: 'set-ocr-lang' }, t('settings.ocrLanguage')), ocrLanguage),
-    h('div', { class: 'field' }, statusList, installLink, downloadButton, progressRow),
+    h('div', { class: 'field' }, statusList, installLink, installHint, downloadButton, progressRow),
   );
 
   const logs = h('button', { class: 'btn btn-quiet btn-small', type: 'button' }, svg(icons.folder), t('settings.openLogs'));
