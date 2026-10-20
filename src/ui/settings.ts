@@ -10,7 +10,7 @@ import {
   type Settings,
   type SettingsLanguage,
 } from '../api';
-import { getLang, t, type Lang } from '../i18n';
+import { getLang, LANGS, LANGUAGE_NAMES, type Lang, t } from '../i18n';
 import { h, icons, setText, svg } from './dom';
 
 export interface SettingsDialogOptions {
@@ -86,8 +86,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     'select',
     { id: 'set-lang' },
     h('option', { value: 'auto' }, t('settings.languageAuto')),
-    h('option', { value: 'tr', lang: 'tr' }, t('settings.languageTr')),
-    h('option', { value: 'en', lang: 'en' }, t('settings.languageEn')),
+    ...LANGS.map((code) => h('option', { value: code, lang: code }, LANGUAGE_NAMES[code])),
   ) as HTMLSelectElement;
   language.value = draft.language;
 

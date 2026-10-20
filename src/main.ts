@@ -11,7 +11,7 @@ import {
   type Settings,
   setSettings,
 } from './api';
-import { type MessageKey, messages, resolveLang, setLang, t } from './i18n';
+import { hasMessage, loadLang, type MessageKey, resolveLang, t } from './i18n';
 import {
   addEntries,
   applyEvent,
@@ -62,14 +62,15 @@ function isAppError(e: unknown): e is AppError {
 function errorText(e: unknown): string {
   if (isAppError(e)) {
     const key = `error.${e.kind}` as MessageKey;
-    return key in messages.en ? t(key) : t('error.generic');
+    return hasMessage(key) ? t(key) : t('error.generic');
   }
   return t('error.generic');
 }
 
-function applyLanguage(settings: Settings): void {
-  const lang = resolveLang(settings.language, navigator.language);
-  setLang(lang);
+/** Loads the chosen locale (English until it arrives or if it fails) and tags the document. */
+async function applyLanguage(settings: Settings): Promise<void> {
+  const systemLanguages = navigator.languages?.length ? navigator.languages : [navigator.language];
+  const lang = await loadLang(resolveLang(settings.language, systemLanguages));
   document.documentElement.lang = lang;
 }
 
@@ -175,7 +176,7 @@ async function saveSettings(next: Settings): Promise<void> {
   const languageChanged = stored.language !== view.settings.language;
   view = { ...view, settings: stored };
   if (languageChanged) {
-    applyLanguage(stored);
+    await applyLanguage(stored);
     mount();
   } else {
     ui?.update(view);
@@ -262,7 +263,7 @@ async function boot(): Promise<void> {
   } catch (err) {
     console.error(err);
   }
-  applyLanguage(view.settings);
+  await applyLanguage(view.settings);
   mount();
 
   installShortcuts({

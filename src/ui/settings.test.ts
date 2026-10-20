@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OcrStatus } from '../api';
-import { setLang } from '../i18n';
+import { loadLang } from '../i18n';
 import { formatMegabytes, ocrStatusLines, setDialogError } from './settings';
 
 describe('settings dialog error line', () => {
@@ -21,8 +21,8 @@ describe('OCR settings', () => {
     expect(formatMegabytes(12_212_656, 'en')).toBe('12.2 MB');
   });
 
-  it('describes the engine that will run', () => {
-    setLang('en');
+  it('describes the engine that will run', async () => {
+    await loadLang('en');
     expect(ocrStatusLines(windows)).toEqual(['Windows OCR will be used (ready).']);
     const ready: OcrStatus = { ...windows, engine: 'ocrs' };
     expect(ocrStatusLines(ready)).toEqual(['The built-in ocrs engine will be used (ready).', 'ocrs reads Latin-script text (English-focused).']);
@@ -31,8 +31,8 @@ describe('OCR settings', () => {
     expect(ocrStatusLines({ ...windows, engine: null, ready: false })).toEqual(['No OCR engine is available; files convert without OCR.']);
   });
 
-  it('is translated', () => {
-    setLang('tr');
+  it('is translated', async () => {
+    await loadLang('tr');
     expect(ocrStatusLines(windows)).toEqual(['Windows OCR kullanılacak (hazır).']);
     expect(ocrStatusLines({ ...windows, engine: 'ocrs' })).toHaveLength(2);
   });

@@ -4,11 +4,12 @@
  *
  * `?scenario=` picks a screen for screenshots: `queue` (default), `empty`, `drag`,
  * `idle` (files added, nothing converted), `preview`, `settings`, `details`, `menu`.
- * `&lang=en|tr` forces the UI language.
+ * `&lang=en|tr|ru|de|es|fr|pt-BR` forces the UI language.
  */
 import type { Channel } from '@tauri-apps/api/core';
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import type { ConvertEvent, DownloadEvent, FileEntry, OcrStatus, Settings } from './api';
+import { isLang } from './i18n';
 import type { Actions } from './ui/context';
 
 const DIR = 'C:\\Users\\Kerem\\Documents\\Raporlar';
@@ -53,7 +54,7 @@ let settings: Settings = {
   outputDir: OUT,
   extractImages: true,
   workers: 2,
-  language: forcedLang === 'en' || forcedLang === 'tr' ? forcedLang : 'auto',
+  language: forcedLang && isLang(forcedLang) ? forcedLang : 'auto',
   ocr: { enabled: false },
 };
 let cancelDownload = false;

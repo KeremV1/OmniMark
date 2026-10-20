@@ -8,7 +8,7 @@ export function modKeyLabel(): string {
   return isMac() ? '⌘' : 'Ctrl';
 }
 
-/** `512 B`, `2,4 MB` (tr) / `2.4 MB` (en). Binary units (1024). */
+/** `512 B`, `2,4 MB` (tr) / `2.4 MB` (en); decimal separator per language. Binary units (1024). */
 export function formatBytes(n: number, lang: Lang): string {
   if (n < 1024) return `${n} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
@@ -18,8 +18,8 @@ export function formatBytes(n: number, lang: Lang): string {
     value /= 1024;
     unit++;
   }
-  const text = value.toFixed(1);
-  return `${lang === 'tr' ? text.replace('.', ',') : text} ${units[unit]}`;
+  const text = new Intl.NumberFormat(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(value);
+  return `${text} ${units[unit]}`;
 }
 
 export function fileName(path: string): string {

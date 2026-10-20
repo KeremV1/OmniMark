@@ -40,7 +40,7 @@ export interface FileEntry {
   supported: boolean;
 }
 
-export type SettingsLanguage = 'auto' | 'tr' | 'en';
+export type SettingsLanguage = 'auto' | 'en' | 'tr' | 'ru' | 'de' | 'es' | 'fr' | 'pt-BR';
 
 export interface OcrSettings {
   enabled: boolean;
