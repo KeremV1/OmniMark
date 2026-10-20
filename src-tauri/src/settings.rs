@@ -240,7 +240,13 @@ mod tests {
     fn new_languages_round_trip_and_unknown_falls_back_to_auto() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.json");
-        for (text, expected) in [("ru", Language::Ru), ("de", Language::De), ("es", Language::Es), ("fr", Language::Fr), ("pt-BR", Language::PtBr)] {
+        for (text, expected) in [
+            ("ru", Language::Ru),
+            ("de", Language::De),
+            ("es", Language::Es),
+            ("fr", Language::Fr),
+            ("pt-BR", Language::PtBr),
+        ] {
             std::fs::write(&path, format!(r#"{{"workers": 3, "language": "{text}"}}"#)).unwrap();
             let s = Settings::load(&path, dir.path());
             assert_eq!(s.language, expected);
