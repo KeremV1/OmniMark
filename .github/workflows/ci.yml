@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main, m1, 'm1-*']
+    branches: [main, m1, 'm1-*', m2, 'm2-*', 'm2/*']
   pull_request:
 jobs:
   test:
@@ -34,8 +34,29 @@ jobs:
         run: bash scripts/fetch-pdfium.sh
       - run: npm ci
       - run: npm run build
+      - name: Tesseract (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng
+      - name: Tesseract (macOS)
+        if: runner.os == 'macOS'
+        run: brew install tesseract tesseract-lang
+      - name: Cache ocrs models
+        id: ocrs-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ocr-models
+          key: ocrs-models-a917b23d-86c145c2
+      - name: Fetch ocrs models
+        if: steps.ocrs-cache.outputs.cache-hit != 'true'
+        run: cargo run -p omnimark-cli -- models fetch ocrs --models-dir "${{ runner.temp }}/ocr-models"
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+        env:
+          OMNIMARK_OCR_MODELS: ${{ runner.temp }}/ocr-models
+      - run: cargo test -p omnimark-core --features ocr,ocr-windows
+        env:
+          OMNIMARK_OCR_MODELS: ${{ runner.temp }}/ocr-models
+      - run: cargo clippy -p omnimark-core --all-targets --features ocr,ocr-windows -- -D warnings
       - run: npm test
       - run: npm run typecheck
