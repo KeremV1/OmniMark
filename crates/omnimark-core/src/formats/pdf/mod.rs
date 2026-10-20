@@ -113,6 +113,18 @@ impl Converter for PdfConverter {
     }
 
     fn convert(&self, input: &Input, ctx: &mut ConvertContext<'_>) -> Result<Document> {
+        self.convert_with(input, ctx, OCR_ROUND_BYTES)
+    }
+}
+
+impl PdfConverter {
+    /// `convert` with an injectable round size (tests use tiny ones).
+    fn convert_with(
+        &self,
+        input: &Input,
+        ctx: &mut ConvertContext<'_>,
+        round_bytes: usize,
+    ) -> Result<Document> {
         let library = match &self.library {
             Some(path) if path.is_file() => path,
             Some(path) => return Err(missing_library(&path.display().to_string())),
@@ -127,6 +139,7 @@ impl Converter for PdfConverter {
                 &input.bytes,
                 pages.len(),
                 ocr.is_some(),
+                round_bytes,
                 ctx,
                 &mut result,
             )?;
@@ -151,12 +164,13 @@ fn missing_library(path: &str) -> ConvertError {
 }
 
 /// Reads pages from `start` under the pdfium lock until the end or until the pixels waiting
-/// for OCR reach [`OCR_ROUND_BYTES`]; the lock and the document are released on return.
+/// for OCR reach `round_bytes` ([`OCR_ROUND_BYTES`] in production); the lock and the document are released on return.
 fn extract_round(
     library: &Path,
     bytes: &[u8],
     start: usize,
     ocr_on: bool,
+    round_bytes: usize,
     ctx: &ConvertContext<'_>,
     result: &mut Document,
 ) -> Result<Round> {
@@ -195,7 +209,7 @@ fn extract_round(
                 result.warn(no_text_layer_warning(i + 1));
             }
         } else if ocr_on {
-            images = page_images(&page, result);
+            images = page_images(&page, round_bytes.saturating_sub(pending), result);
         }
         pending += images.iter().map(|(_, im)| im.rgba().len()).sum::<usize>()
             + scan.as_ref().map_or(0, |im| im.rgba().len());
@@ -208,7 +222,7 @@ fn extract_round(
         });
         if !ocr_on {
             ctx.report((i + 1) as f32 / page_count as f32);
-        } else if pending >= OCR_ROUND_BYTES {
+        } else if pending >= round_bytes {
             break;
         }
     }
@@ -219,9 +233,12 @@ fn extract_round(
 }
 
 /// Top-level image objects of a page as OCR input with their top edge (top-left origin).
-fn page_images(page: &PdfPage<'_>, result: &mut Document) -> Vec<(f32, OcrImage)> {
+/// Images past `budget` bytes of pixel estimate (`w*h*4`, from metadata) are skipped with a
+/// warning; the first image is always read.
+fn page_images(page: &PdfPage<'_>, budget: usize, result: &mut Document) -> Vec<(f32, OcrImage)> {
     let page_height = page.height().value;
     let mut images = Vec::new();
+    let mut used = 0usize;
     for object in page.objects().iter() {
         let Some(image) = object.as_image_object() else {
             continue;
@@ -239,7 +256,14 @@ fn page_images(page: &PdfPage<'_>, result: &mut Document) -> Vec<(f32, OcrImage)
             result.warn_once(DECODE_WARNING);
             continue;
         }
+        let estimate = (w as usize) * (h as usize) * 4;
+        if used > 0 && used.saturating_add(estimate) > budget {
+            result.warn_once(DECODE_WARNING);
+            break;
+        }
+        used = used.saturating_add(estimate);
         let Ok(bounds) = object.bounds() else {
+            result.warn_once(DECODE_WARNING);
             continue;
         };
         match image.get_raw_image() {
@@ -670,5 +694,118 @@ mod tests {
             doc.markdown,
             "## Page 1\n\n*[No text could be extracted from this page]*"
         );
+    }
+
+    fn convert_capped(
+        converter: &PdfConverter,
+        path: &Path,
+        engine: Arc<dyn OcrEngine>,
+        round_bytes: usize,
+        cancel: &CancelToken,
+    ) -> Result<Document> {
+        let input = Input {
+            path: path.to_path_buf(),
+            bytes: std::fs::read(path).unwrap(),
+        };
+        let options = ConvertOptions {
+            ocr: Some(engine),
+            ..ConvertOptions::default()
+        };
+        let mut sink = NullAssetSink;
+        let progress = |_: f32| {};
+        let mut ctx = ConvertContext {
+            options: &options,
+            assets: &mut sink,
+            cancel,
+            progress: &progress,
+        };
+        converter.convert_with(&input, &mut ctx, round_bytes)
+    }
+
+    #[test]
+    fn one_round_per_page_matches_a_single_round() {
+        let Some(library) = real_library() else {
+            return;
+        };
+        let converter = PdfConverter::new(Some(library));
+        let path = ocr_fixture("pdf_multipage.pdf");
+        let whole_engine = Arc::new(MockEngine::default());
+        let whole = convert_capped(
+            &converter,
+            &path,
+            whole_engine.clone(),
+            OCR_ROUND_BYTES,
+            &CancelToken::new(),
+        )
+        .unwrap();
+        let split_engine = Arc::new(MockEngine::default());
+        let split = convert_capped(
+            &converter,
+            &path,
+            split_engine.clone(),
+            1,
+            &CancelToken::new(),
+        )
+        .unwrap();
+        assert_eq!(split.markdown, whole.markdown);
+        assert_eq!(split.warnings, whole.warnings);
+        assert_eq!(split_engine.calls(), whole_engine.calls());
+        assert!(whole_engine.calls() >= 3);
+    }
+
+    #[test]
+    fn cancelling_during_the_first_round_stops_the_conversion() {
+        let Some(library) = real_library() else {
+            return;
+        };
+        struct CancelOnUse(CancelToken);
+        impl OcrEngine for CancelOnUse {
+            fn name(&self) -> &'static str {
+                "cancel"
+            }
+            fn recognize(
+                &self,
+                _: &OcrImage,
+                _: &OcrLanguage,
+            ) -> std::result::Result<String, OcrError> {
+                self.0.cancel();
+                Ok("x".into())
+            }
+        }
+        let converter = PdfConverter::new(Some(library));
+        let cancel = CancelToken::new();
+        let err = convert_capped(
+            &converter,
+            &ocr_fixture("pdf_multipage.pdf"),
+            Arc::new(CancelOnUse(cancel.clone())),
+            1,
+            &cancel,
+        )
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Cancelled);
+    }
+
+    #[test]
+    fn images_beyond_the_page_budget_are_skipped_with_a_warning() {
+        let Some(library) = real_library() else {
+            return;
+        };
+        let converter = PdfConverter::new(Some(library));
+        let path = ocr_fixture("pdf_multiple_images.pdf");
+        let engine = Arc::new(MockEngine::default());
+        let doc =
+            convert_capped(&converter, &path, engine.clone(), 1, &CancelToken::new()).unwrap();
+        assert_eq!(engine.calls(), 1, "only the first image fits");
+        assert!(doc.warnings.contains(&DECODE_WARNING.to_string()));
+        let full = Arc::new(MockEngine::default());
+        let all = convert_capped(
+            &converter,
+            &path,
+            full,
+            OCR_ROUND_BYTES,
+            &CancelToken::new(),
+        )
+        .unwrap();
+        assert!(!all.warnings.contains(&DECODE_WARNING.to_string()));
     }
 }
