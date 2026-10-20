@@ -2,7 +2,6 @@
 
 use std::io::Cursor;
 
-use image::imageops::FilterType;
 use image::{DynamicImage, ImageReader, Limits};
 
 use super::{OcrError, OcrImage};
@@ -34,12 +33,25 @@ pub fn decode(bytes: &[u8]) -> Result<Option<OcrImage>, OcrError> {
 
 /// Shrinks the long side to [`MAX_OCR_SIDE`] and flattens transparency onto white
 /// (transparent pixels are black in RGB and would hide dark text).
+///
+/// Oversized images are flattened, reduced to grey and area-averaged with `thumbnail`:
+/// `resize` allocates an f32 intermediate of old width x new height x 16 bytes (about 1 GB
+/// for a 16000 px square), `thumbnail` only allocates its output.
 pub fn from_dynamic(image: DynamicImage) -> Option<OcrImage> {
     if image.width().min(image.height()) < MIN_OCR_SIDE {
         return None;
     }
     let image = if image.width().max(image.height()) > MAX_OCR_SIDE {
-        image.resize(MAX_OCR_SIDE, MAX_OCR_SIDE, FilterType::Triangle)
+        let grey = match image {
+            DynamicImage::ImageLuma8(grey) => grey,
+            other if other.color().has_alpha() => {
+                let mut rgba = other.into_rgba8();
+                flatten_on_white(&mut rgba);
+                DynamicImage::ImageRgba8(rgba).into_luma8()
+            }
+            other => other.into_luma8(),
+        };
+        DynamicImage::ImageLuma8(grey).thumbnail(MAX_OCR_SIDE, MAX_OCR_SIDE)
     } else {
         image
     };
@@ -49,15 +61,19 @@ pub fn from_dynamic(image: DynamicImage) -> Option<OcrImage> {
     let has_alpha = image.color().has_alpha();
     let mut rgba = image.into_rgba8();
     if has_alpha {
-        for pixel in rgba.pixels_mut() {
-            let [r, g, b, a] = pixel.0;
-            let a = u32::from(a);
-            let blend = |c: u8| ((u32::from(c) * a + 255 * (255 - a)) / 255) as u8;
-            pixel.0 = [blend(r), blend(g), blend(b), 255];
-        }
+        flatten_on_white(&mut rgba);
     }
     let (width, height) = rgba.dimensions();
     OcrImage::new(width, height, rgba.into_raw()).ok()
+}
+
+fn flatten_on_white(rgba: &mut image::RgbaImage) {
+    for pixel in rgba.pixels_mut() {
+        let [r, g, b, a] = pixel.0;
+        let a = u32::from(a);
+        let blend = |c: u8| ((u32::from(c) * a + 255 * (255 - a)) / 255) as u8;
+        pixel.0 = [blend(r), blend(g), blend(b), 255];
+    }
 }
 
 #[cfg(test)]
@@ -89,6 +105,19 @@ mod tests {
         let photo = from_dynamic(DynamicImage::ImageRgba8(RgbaImage::new(1615, 1967))).unwrap();
         assert_eq!((photo.width(), photo.height()), (1615, 1967));
         assert!(from_dynamic(DynamicImage::ImageRgba8(RgbaImage::new(20_000, 30))).is_none());
+    }
+
+    #[test]
+    fn huge_grey_image_is_downscaled_without_the_resize_blowup() {
+        use image::GrayImage;
+        let huge = from_dynamic(DynamicImage::ImageLuma8(GrayImage::new(16_000, 16_000))).unwrap();
+        assert_eq!((huge.width(), huge.height()), (4096, 4096));
+    }
+
+    #[test]
+    fn huge_transparent_image_is_flattened_white_when_downscaled() {
+        let wide = from_dynamic(DynamicImage::ImageRgba8(RgbaImage::new(8192, 100))).unwrap();
+        assert_eq!(&wide.rgba()[..4], &[255, 255, 255, 255]);
     }
 
     #[test]
