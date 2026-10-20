@@ -156,7 +156,8 @@ impl Default for Timeouts {
         Self {
             connect: Duration::from_secs(20),
             recv_response: Duration::from_secs(30),
-            recv_body: Duration::from_secs(30),
+            // ureq has no idle-read timeout; this caps one model file (~10 MB) even on a slow link.
+            recv_body: Duration::from_secs(10 * 60),
             global: Duration::from_secs(15 * 60),
         }
     }
