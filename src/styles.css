@@ -541,6 +541,11 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+.row-cancel {
+  flex: none;
+  margin-left: 4px;
+}
+
 .no-match {
   margin: 40px 16px;
   text-align: center;
@@ -1314,6 +1319,7 @@ body.is-dragging::after {
 }
 
 .ocr .field a[hidden],
+.ocr .field small[hidden],
 .ocr .field button[hidden],
 .ocr .ocr-progress[hidden],
 .ocr .field[hidden],

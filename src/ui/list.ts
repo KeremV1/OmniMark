@@ -174,7 +174,16 @@ export function createList(actions: Actions): List {
           fill,
         );
         const pct = h('span', { class: 'pct' });
-        row.status.replaceChildren(track, pct);
+        const stop = h(
+          'button',
+          { class: 'btn-icon btn-icon-small row-cancel', type: 'button', title: t('action.cancelRun'), 'aria-label': t('action.cancelRun') },
+          svg(icons.cross),
+        );
+        stop.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          actions.cancel();
+        });
+        row.status.replaceChildren(track, pct, stop);
         row.bar = { track, fill, pct };
         row.statusKey = 'converting';
       }

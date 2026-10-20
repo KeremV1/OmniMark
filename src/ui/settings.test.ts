@@ -22,16 +22,31 @@ describe('OCR settings', () => {
   });
   it('describes engine status and warns about ocrs for Turkish', () => {
     setLang('tr');
-    expect(ocrStatusLines(base, 'tr')).toEqual(['Windows OCR: tr hazır', 'Tesseract: bulunamadı', 'ocrs: model indirilmedi']);
+    expect(ocrStatusLines(base, 'tr')).toEqual(['Windows OCR: tr hazır', 'Tesseract: kurulu değil (isteğe bağlı; Windows OCR yeterli)', 'ocrs: model indirilmedi']);
     const withTesseract: OcrStatus = { ...base, tesseractPath: '/usr/bin/tesseract', tesseractLanguages: ['eng', 'tur'], selected: 'tesseract' };
     expect(ocrStatusLines(withTesseract, 'tr')[1]).toBe('Tesseract: /usr/bin/tesseract (eng, tur)');
     const ocrsOnly: OcrStatus = { ...base, windowsLanguages: [], ocrsModels: true, selected: 'ocrs' };
     expect(ocrStatusLines(ocrsOnly, 'tr')).toEqual([
-      'Windows OCR: yüklü dil yok', 'Tesseract: bulunamadı', 'ocrs: model indirildi', 'ocrs Türkçe harfleri (ğ ş ı İ ç ö ü) tanımaz; Türkçe için önerilmez.',
+      'Windows OCR: yüklü dil yok', 'Tesseract: kurulu değil (isteğe bağlı; Windows OCR yeterli)', 'ocrs: model indirildi', 'ocrs Türkçe harfleri (ğ ş ı İ ç ö ü) tanımaz; Türkçe için önerilmez.',
     ]);
     setLang('en');
     expect(ocrStatusLines({ ...base, windowsBuilt: false, selected: null }, 'en')).toEqual([
-      'Tesseract: not found', 'ocrs: model not downloaded', 'No OCR engine is available; files convert without OCR.',
+      'Tesseract: not installed (optional)', 'ocrs: model not downloaded', 'No OCR engine is available; files convert without OCR.',
     ]);
+  });
+  it('says the selected engine is unavailable only when another engine is ready', () => {
+    setLang('en');
+    const selectedMissing: OcrStatus = { ...base, selected: null };
+    expect(ocrStatusLines(selectedMissing, 'en')).toContain("The selected engine is not available; choose 'Automatic' or install it.");
+    expect(ocrStatusLines(selectedMissing, 'en').join()).not.toContain('No OCR engine');
+    const nothing: OcrStatus = { ...base, windowsLanguages: [], selected: null };
+    expect(ocrStatusLines(nothing, 'en')).toContain('No OCR engine is available; files convert without OCR.');
+    setLang('tr');
+    expect(ocrStatusLines(selectedMissing, 'tr')).toContain("Seçili motor kullanılamıyor; 'Otomatik'i seçin ya da motoru kurun.");
+  });
+  it('words the missing Tesseract line per platform', () => {
+    setLang('en');
+    expect(ocrStatusLines(base, 'en')[1]).toBe('Tesseract: not installed (optional; Windows OCR covers it)');
+    expect(ocrStatusLines({ ...base, windowsBuilt: false }, 'en')[0]).toBe('Tesseract: not installed (optional)');
   });
 });
