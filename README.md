@@ -10,7 +10,7 @@
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/Rust-1.90%2B-B7410E?style=flat-square">
   <img alt="Tauri 2" src="https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-279%20passing-15803D?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-312%20passing-15803D?style=flat-square">
   <img alt="Platforms" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-5A5F6E?style=flat-square">
   <img alt="Languages" src="https://img.shields.io/badge/aray%C3%BCz-7%20dil-0E7490?style=flat-square">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/lisans-MIT-4F46E5?style=flat-square"></a>
@@ -22,11 +22,11 @@
 
 **OmniMark**, belgeleri, tabloları, sunumları, web sayfalarını ve görselleri temiz Markdown'a (`.md`) dönüştüren bir masaüstü uygulamasıdır. Her şey yerelde çalışır, hiçbir dosya buluta gönderilmez. Rust ve Tauri 2 ile yazıldığı için hızlı açılır, küçük kalır (≈7 MB kurulum) ve boşta yaklaşık 71 MB bellek kullanır.
 
-> **Durum:** ✅ M1 (dönüştürücüler + masaüstü uygulaması) ve ✅ M2 (görsel metadata + OCR) tamamlandı. M2 kapanış turu: platform başına tek, otomatik OCR motoru, 7 dilli arayüz, ilk açılışta çıktı klasörü kartı ✅ ve **ZIP desteği** 🔄 (geliştiriliyor). Bunlar bitince **M3: ses transkripsiyonu** başlar. README yayına kadar Türkçe; yayında İngilizceye geçecek.
+> **Durum:** ✅ M1 (dönüştürücüler + masaüstü uygulaması) ve ✅ M2 (görsel metadata + OCR) tamamlandı. M2 kapanış turu: platform başına tek, otomatik OCR motoru, 7 dilli arayüz, ilk açılışta çıktı klasörü kartı ve ZIP desteği; hepsi ✅. Sıradaki aşama **M3: ses transkripsiyonu**. README yayına kadar Türkçe; yayında İngilizceye geçecek.
 
 ## Kaldığımız yer
 
-**Geldiğimiz nokta (2026-10-20):** M2'nin 9 görevi bitti; M3'ten önce bir kapanış turu yapılıyor. Türkçe öncelikli M2 sonu hâli [`v0.1.0-tr`](https://github.com/KeremV1/OmniMark/releases/tag/v0.1.0-tr) etiketinde saklanıyor.
+**Geldiğimiz nokta (2026-10-20):** M2 kapanış turuyla birlikte tamamen bitti. Türkçe öncelikli M2 sonu hâli [`v0.1.0-tr`](https://github.com/KeremV1/OmniMark/releases/tag/v0.1.0-tr) etiketinde saklanıyor.
 
 ### M2 kapanış turu (M3 öncesi)
 
@@ -35,12 +35,11 @@
 | OCR sadeleştirme | Tesseract kaldırıldı; motor otomatik (Windows OCR / ocrs); ayarlarda tek anahtar | ✅ |
 | Çok dilli arayüz | English (varsayılan), Türkçe, Русский, Deutsch, Español, Français, Português (Brasil); yalnız seçili dil yüklenir | ✅ |
 | İlk açılış kartı | "Markdown dosyaları şuraya kaydedilecek: `<klasör>`" · **Değiştir** · **Tamam** (tek seferlik) | ✅ |
-| ZIP desteği | `.zip` içindeki dosyalar dönüştürülür; çıktı klasör / tek `.md` / `.zip`; zip bombası ve yol kaçışı sınırları | 🔄 Geliştiriliyor |
+| ZIP desteği | `.zip` içindeki dosyalar dönüştürülür; çıktı klasör / tek `.md` / `.zip`; zip bombası, yol kaçışı ve Windows aygıt adı korumaları | ✅ |
 
 ### Sıradaki iş
 
-1. **ZIP desteğini bitir**, `main`'e birleştir, M2 kapanış turunu kapat.
-2. **M3:** ses transkripsiyonu (yerel Whisper, isteğe bağlı modül); önce tasarım, onayla.
+1. **M3:** ses transkripsiyonu (yerel Whisper, isteğe bağlı modül); önce tasarım, onayla.
 
 Ayrıntı: [HANDOFF.md](HANDOFF.md) · [Kapanış turu tasarımı](docs/superpowers/specs/2026-10-20-m2-kapanis-sadelestirme.md) · [Çıktı klasörü ve ZIP tasarımı](docs/superpowers/specs/2026-10-20-cikti-klasoru-ve-zip.md) · [M2 ölçümleri](docs/m2-olcumler.md) · [OCR kalite ölçümü](docs/m2-ocr-kalite.md) · [M2 ertelenen bulgular](docs/m2-ertelenen-bulgular.md) · [M1 ölçümleri](docs/m1-olcumler.md)
 
@@ -64,7 +63,7 @@ Ayrıntı: [HANDOFF.md](HANDOFF.md) · [Kapanış turu tasarımı](docs/superpow
 | HTML | `.html`, `.htm` | Gövde içeriği; script ve stil blokları ayıklanır |
 | Görsel | `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`, `.tif`, `.tiff` | EXIF/XMP metadata, isteğe bağlı OCR |
 | Metin | `.txt`, `.md`, `.markdown`, `.json`, `.jsonl`, `.csv` | Düz metin; JSON kod bloğu; CSV için Markdown tablosu |
-| ZIP (🔄 geliştiriliyor) | `.zip` | İçindeki desteklenen dosyalar dönüştürülür. Çıktı: klasör (yapı korunur, varsayılan) · tek birleşik `.md` (MarkItDown davranışı) · `.zip`. İç içe zip açılmaz; desteklenmeyen dosyalar atlanıp bildirilir |
+| ZIP | `.zip` | İçindeki desteklenen dosyalar dönüştürülür. Çıktı: klasör (yapı korunur, varsayılan) · tek birleşik `.md` (MarkItDown davranışı) · `.zip`. İç içe zip açılmaz; desteklenmeyen dosyalar atlanıp bildirilir |
 | Ses (M3) | `.wav`, `.mp3`, `.m4a` … | Metadata ve isteğe bağlı konuşmadan metne çeviri |
 
 ## OCR
@@ -106,8 +105,8 @@ Her dönüştürücü önce dosyayı kabul edip etmediğini söyler (uzantı, MI
 | Aşama | Kapsam | Durum |
 | --- | --- | --- |
 | **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | ✅ Tamamlandı (19/19 görev) |
-| **M2** | Görsel metadata (EXIF/XMP) ve OCR · kapanış turu: sade OCR, 7 dilli arayüz, ilk açılış kartı, ZIP desteği | 🔄 9/9 görev ✅ · kapanış turu 3/4 (ZIP sürüyor) |
-| **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | ⏭ Kapanış turundan sonra |
+| **M2** | Görsel metadata (EXIF/XMP) ve OCR · kapanış turu: sade OCR, 7 dilli arayüz, ilk açılış kartı, ZIP desteği | ✅ Tamamlandı (9/9 görev + kapanış turu 4/4) |
+| **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | ⏭ Sıradaki |
 | **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans | ⏳ Planlandı |
 | **M5** | Windows, macOS ve Linux için imzalı kurulum paketleri; README İngilizce | ⏳ Planlandı |
 
@@ -138,6 +137,7 @@ cargo test --workspace                                     # Rust testleri (gold
 npm test                                                   # arayüz testleri
 cargo run -p omnimark-cli -- convert dosya.pdf -o çıktı    # komut satırı
 cargo run -p omnimark-cli -- convert foto.jpg --stdout --ocr
+cargo run -p omnimark-cli -- convert arsiv.zip --zip-output folder -o çıktı   # zip: folder | single | zip
 cargo run -p omnimark-cli -- models fetch ocrs             # ocrs modeli (≈12 MB)
 ```
 
