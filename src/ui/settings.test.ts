@@ -27,7 +27,7 @@ describe('OCR settings', () => {
     expect(ocrStatusLines(withTesseract, 'tr')[1]).toBe('Tesseract: /usr/bin/tesseract (eng, tur)');
     const ocrsOnly: OcrStatus = { ...base, windowsLanguages: [], ocrsModels: true, selected: 'ocrs' };
     expect(ocrStatusLines(ocrsOnly, 'tr')).toEqual([
-      'Windows OCR: yüklü dil yok', 'Tesseract: kurulu değil (isteğe bağlı; Windows OCR yeterli)', 'ocrs: model indirildi', 'ocrs Türkçe harfleri (ğ ş ı İ ç ö ü) tanımaz; Türkçe için önerilmez.',
+      'Windows OCR: yüklü dil yok', 'Tesseract: kurulu değil (isteğe bağlı)', 'ocrs: model indirildi', 'ocrs Türkçe harfleri (ğ ş ı İ ç ö ü) tanımaz; Türkçe için önerilmez.',
     ]);
     setLang('en');
     expect(ocrStatusLines({ ...base, windowsBuilt: false, selected: null }, 'en')).toEqual([
@@ -48,5 +48,7 @@ describe('OCR settings', () => {
     setLang('en');
     expect(ocrStatusLines(base, 'en')[1]).toBe('Tesseract: not installed (optional; Windows OCR covers it)');
     expect(ocrStatusLines({ ...base, windowsBuilt: false }, 'en')[0]).toBe('Tesseract: not installed (optional)');
+    // Windows OCR built but without a language pack cannot "cover it".
+    expect(ocrStatusLines({ ...base, windowsLanguages: [] }, 'en')[1]).toBe('Tesseract: not installed (optional)');
   });
 });

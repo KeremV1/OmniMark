@@ -50,7 +50,7 @@ export function ocrStatusLines(status: OcrStatus, language: 'tr' | 'en' | 'auto'
   lines.push(
     status.tesseractPath && status.tesseractLanguages.length > 0
       ? t('ocr.tesseractReady', { path: status.tesseractPath, langs: status.tesseractLanguages.join(', ') })
-      : t(status.windowsBuilt ? 'ocr.tesseractOptional' : 'ocr.tesseractMissing'),
+      : t(status.windowsBuilt && status.windowsLanguages.length > 0 ? 'ocr.tesseractOptional' : 'ocr.tesseractMissing'),
   );
   if (status.ocrsBuilt) lines.push(t(status.ocrsModels ? 'ocr.ocrsReady' : 'ocr.ocrsMissing'));
   if (status.selected === null) {
