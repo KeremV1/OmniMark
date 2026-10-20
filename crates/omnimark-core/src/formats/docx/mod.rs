@@ -39,6 +39,7 @@ impl Converter for DocxConverter {
             .ok_or_else(|| ConvertError::Corrupt("missing word/document.xml".into()))?;
         let mut parts = DocxParts::open(archive)?;
         let mut doc = Document::default();
+        parts.ocr = crate::ocr::DocumentOcr::new(ctx.options);
         doc.markdown = render_body(&document_xml, &mut parts, ctx, &mut doc)?;
         Ok(doc)
     }
@@ -53,8 +54,10 @@ pub(crate) struct DocxParts<'a> {
     rels: HashMap<String, Relationship>,
     footnotes: Option<Vec<u8>>,
     endnotes: Option<Vec<u8>>,
-    /// Part path → stored link target, so a repeated picture is written once.
-    image_cache: HashMap<String, Option<String>>,
+    /// Part path → (stored link target, OCR text), so a repeated picture is processed once.
+    image_cache: HashMap<String, (Option<String>, Option<String>)>,
+    /// OCR helper for embedded pictures; `None` when OCR is off.
+    ocr: Option<crate::ocr::DocumentOcr>,
     /// Non-fatal problems found while loading parts; moved into the document by `render_body`.
     warnings: Vec<String>,
 }
@@ -69,6 +72,7 @@ impl<'a> DocxParts<'a> {
             footnotes: None,
             endnotes: None,
             image_cache: HashMap::new(),
+            ocr: None,
             warnings: Vec::new(),
         }
     }

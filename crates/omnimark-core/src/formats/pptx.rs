@@ -5,6 +5,7 @@ use quick_xml::events::Event;
 use crate::archive::Archive;
 use crate::error::{ConvertError, Result};
 use crate::markdown;
+use crate::ocr::{block_markdown, DocumentOcr};
 use crate::ooxml::{self, Relationship};
 use crate::registry::{ConvertContext, Converter};
 use crate::xml;
@@ -47,12 +48,15 @@ impl Converter for PptxConverter {
 
         let mut doc = Document::new(String::new());
         let mut md = String::new();
+        let mut ocr = DocumentOcr::new(ctx.options);
         let total = slide_parts.len().max(1) as f32;
         for (index, part) in slide_parts.iter().enumerate() {
             ctx.check_cancel()?;
             md.push_str(&format!("\n\n<!-- Slide number: {} -->\n", index + 1));
             match archive.read(part)? {
-                Some(bytes) => convert_slide(&mut archive, part, &bytes, ctx, &mut doc, &mut md)?,
+                Some(bytes) => {
+                    convert_slide(&mut archive, part, &bytes, ctx, &mut doc, &mut md, &mut ocr)?
+                }
                 None => doc.warn(format!(
                     "Slide {} could not be found and was skipped.",
                     index + 1
@@ -451,6 +455,7 @@ struct Slide<'r, 'a, 'c> {
     doc: &'r mut Document,
     part: &'r str,
     rels: Vec<Relationship>,
+    ocr: &'r mut Option<DocumentOcr>,
 }
 
 fn convert_slide(
@@ -460,6 +465,7 @@ fn convert_slide(
     ctx: &mut ConvertContext<'_>,
     doc: &mut Document,
     md: &mut String,
+    ocr: &mut Option<DocumentOcr>,
 ) -> Result<()> {
     let tree = parse_tree(bytes)?;
     let rels = read_rels(archive, part)?;
@@ -477,6 +483,7 @@ fn convert_slide(
         doc,
         part,
         rels,
+        ocr,
     };
     slide.render(shapes, md)?;
 
@@ -614,7 +621,15 @@ impl Slide<'_, '_, '_> {
             Some(bytes) => {
                 let name = target.rsplit('/').next().unwrap_or(&target);
                 let link = self.ctx.assets.store(name, &bytes)?;
-                Ok(markdown::image(alt, link.as_deref()))
+                let md = markdown::image(alt, link.as_deref());
+                let text = match self.ocr.as_mut() {
+                    Some(ocr) => ocr.image_bytes(&bytes, self.ctx.cancel, self.doc)?,
+                    None => None,
+                };
+                Ok(match text {
+                    Some(text) => format!("{md}\n\n{}", block_markdown(&text)),
+                    None => md,
+                })
             }
             None => {
                 self.doc.warn("An embedded image could not be found.");

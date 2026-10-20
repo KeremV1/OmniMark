@@ -11,6 +11,7 @@ use crate::formats::omml::omml_to_latex;
 // The shared table caps also guard against tiny XML that expands into huge tables
 // (`w:gridSpan` in the thousands): cells are dropped while the table is being built.
 use crate::markdown::{image, table, MAX_TABLE_CELLS, MAX_TABLE_COLUMNS, TABLE_WARNING};
+use crate::ocr::{block_inline, block_markdown};
 use crate::ooxml::resolve_part;
 use crate::registry::ConvertContext;
 use crate::xml::{append_text, attr, local_name, reader};
@@ -576,12 +577,15 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
             }
             return Ok(image(alt, None));
         };
-        if !self.ctx.options.extract_images {
+        if !self.ctx.options.extract_images && self.parts.ocr.is_none() {
             return Ok(image(alt, None));
         }
         let part = resolve_part(DOCUMENT_PART, &embedded.target);
-        if let Some(cached) = self.parts.image_cache.get(&part) {
-            return Ok(image(alt, cached.as_deref()));
+        if let Some((link, text)) = self.parts.image_cache.get(&part).cloned() {
+            if let Some(text) = text {
+                self.push_ocr_block(&text);
+            }
+            return Ok(image(alt, link.as_deref()));
         }
         let bytes = match self.parts.archive.as_mut().map(|a| a.read(&part)) {
             Some(Ok(Some(bytes))) => bytes,
@@ -599,17 +603,60 @@ impl<'a, 'b, 'c> Engine<'a, 'b, 'c> {
             None => return Ok(image(alt, None)),
         };
         let file_name = part.rsplit('/').next().unwrap_or("image");
-        let link = match self.ctx.assets.store(file_name, &bytes) {
-            Ok(link) => link,
-            Err(ConvertError::Cancelled) => return Err(ConvertError::Cancelled),
-            Err(error) => {
-                self.doc
-                    .warn(format!("Image could not be saved: {part} ({error})"));
-                None
+        let link = if self.ctx.options.extract_images {
+            match self.ctx.assets.store(file_name, &bytes) {
+                Ok(link) => link,
+                Err(ConvertError::Cancelled) => return Err(ConvertError::Cancelled),
+                Err(error) => {
+                    self.doc
+                        .warn(format!("Image could not be saved: {part} ({error})"));
+                    None
+                }
             }
+        } else {
+            None
         };
-        self.parts.image_cache.insert(part, link.clone());
+        let text = match self.parts.ocr.as_mut() {
+            Some(ocr) => ocr.image_bytes(&bytes, self.ctx.cancel, self.doc)?,
+            None => None,
+        };
+        if let Some(text) = &text {
+            self.push_ocr_block(text);
+        }
+        self.parts.image_cache.insert(part, (link.clone(), text));
         Ok(image(alt, link.as_deref()))
+    }
+
+    /// The OCR block goes after the current paragraph: indented under a list item, one line in
+    /// a table cell (`emit` uses `plain` there).
+    fn push_ocr_block(&mut self, text: &str) {
+        let indent = self.paras.last().and_then(|para| {
+            let num_id = para.num_id.as_deref().filter(|id| *id != "0")?;
+            let marker = if self.parts.numbering.is_numbered(num_id, para.level) {
+                3
+            } else {
+                2
+            };
+            Some(2 * para.level.min(8) + marker)
+        });
+        let md = block_markdown(text);
+        let md = match indent {
+            Some(n) => md
+                .lines()
+                .map(|line| format!("{}{line}", " ".repeat(n)))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            None => md,
+        };
+        let block = Block {
+            md,
+            plain: block_inline(text),
+            list: false,
+        };
+        match self.paras.last_mut() {
+            Some(para) => para.extras.push(block),
+            None => self.emit(block),
+        }
     }
 }
 

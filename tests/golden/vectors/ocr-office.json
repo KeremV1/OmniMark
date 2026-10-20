@@ -1,0 +1,181 @@
+[
+  {
+    "file": "docx_image_start.docx",
+    "dir": "ocr",
+    "exclude": [
+      "[Image OCR]"
+    ]
+  },
+  {
+    "file": "pptx_image_start.pptx",
+    "dir": "ocr",
+    "exclude": [
+      "[Image OCR]"
+    ]
+  },
+  {
+    "file": "xlsx_multiple_images.xlsx",
+    "dir": "ocr",
+    "exclude": [
+      "[Image OCR]"
+    ]
+  },
+  {
+    "file": "docx_image_start.docx",
+    "dir": "ocr",
+    "ocr": true,
+    "exact": "# Document with Image at Start\n\n![](docx_image_start_assets/image1.png)\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*\n\nThis is the main content after the header image.\n\nMore text content here."
+  },
+  {
+    "file": "docx_image_middle.docx",
+    "dir": "ocr",
+    "ocr": true,
+    "exact": "# Introduction\n\nThis is the introduction section.\n\nWe will see an image below.\n\n![](docx_image_middle_assets/image1.png)\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*\n\n# Analysis\n\nThis section comes after the image."
+  },
+  {
+    "file": "docx_image_end.docx",
+    "dir": "ocr",
+    "ocr": true,
+    "exact": "# Report\n\nMain findings of the report.\n\nDetails and analysis.\n\nRecommendations.\n\n![](docx_image_end_assets/image1.png)\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*"
+  },
+  {
+    "file": "docx_image_start.docx",
+    "dir": "ocr",
+    "ocr": true,
+    "extract_images": false,
+    "include": [
+      "![]()\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*"
+    ]
+  },
+  {
+    "file": "docx_multiple_images.docx",
+    "dir": "ocr",
+    "ocr": true,
+    "regex": [
+      "(?s)First section\n\n!\\[\\]\\([^)]+\\)\n\n\\*\\[Image OCR\\].*Second section with another image\n\n!\\[\\]\\([^)]+\\)\n\n\\*\\[Image OCR\\].*\n\nConclusion$"
+    ],
+    "counts": [
+      {
+        "text": "MOCK\\_OCR\\_TEXT\\_12345",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "file": "docx_multipage.docx",
+    "dir": "ocr",
+    "ocr": true,
+    "counts": [
+      {
+        "text": "MOCK\\_OCR\\_TEXT\\_12345",
+        "count": 3
+      }
+    ]
+  },
+  {
+    "file": "docx_complex_layout.docx",
+    "dir": "ocr",
+    "ocr": true,
+    "include": [
+      "| Authentication | Active |",
+      "Security notice:\n\n![](docx_complex_layout_assets/image1.png)\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*"
+    ]
+  },
+  {
+    "file": "pptx_image_start.pptx",
+    "dir": "ocr",
+    "ocr": true,
+    "exact": "<!-- Slide number: 1 -->\n# Welcome\n\n![temp_pptx1.png](pptx_image_start_assets/image1.png)\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*"
+  },
+  {
+    "file": "pptx_image_middle.pptx",
+    "dir": "ocr",
+    "ocr": true,
+    "exact": "<!-- Slide number: 1 -->\n# Introduction\n\n<!-- Slide number: 2 -->\n# Architecture\n\n![temp_pptx2.png](pptx_image_middle_assets/image1.png)\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*\n\n<!-- Slide number: 3 -->\n# Conclusion"
+  },
+  {
+    "file": "pptx_image_end.pptx",
+    "dir": "ocr",
+    "ocr": true,
+    "exact": "<!-- Slide number: 1 -->\n# Presentation\n\n<!-- Slide number: 2 -->\n# Thank You\n\n![temp_pptx4.png](pptx_image_end_assets/image1.png)\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*"
+  },
+  {
+    "file": "pptx_complex_layout.pptx",
+    "dir": "ocr",
+    "ocr": true,
+    "exact": "<!-- Slide number: 1 -->\n# Product Comparison\n\nOur products lead the market\n\n![temp_pptx5.png](pptx_complex_layout_assets/image1.png)\n\n*[Image OCR]\\\nMOCK\\_OCR\\_TEXT\\_12345\\\n[End OCR]*"
+  },
+  {
+    "file": "pptx_multiple_images.pptx",
+    "dir": "ocr",
+    "ocr": true,
+    "include": [
+      "![temp_pptx3_1.png](pptx_multiple_images_assets/",
+      "![temp_pptx3_2.png](pptx_multiple_images_assets/"
+    ],
+    "counts": [
+      {
+        "text": "MOCK\\_OCR\\_TEXT\\_12345",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "file": "xlsx_image_start.xlsx",
+    "dir": "ocr",
+    "ocr": true,
+    "regex": [
+      "(?s)\\| Widget B \\| 150 \\|\n\n!\\[[^\\]]*\\]\\(xlsx_image_start_assets/[^)]+\\)\n\n\\*\\[Image OCR\\].*## Forecast Q2"
+    ],
+    "counts": [
+      {
+        "text": "MOCK\\_OCR\\_TEXT\\_12345",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "file": "xlsx_image_middle.xlsx",
+    "dir": "ocr",
+    "ocr": true,
+    "counts": [
+      {
+        "text": "MOCK\\_OCR\\_TEXT\\_12345",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "file": "xlsx_image_end.xlsx",
+    "dir": "ocr",
+    "ocr": true,
+    "counts": [
+      {
+        "text": "MOCK\\_OCR\\_TEXT\\_12345",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "file": "xlsx_complex_layout.xlsx",
+    "dir": "ocr",
+    "ocr": true,
+    "counts": [
+      {
+        "text": "MOCK\\_OCR\\_TEXT\\_12345",
+        "count": 4
+      }
+    ]
+  },
+  {
+    "file": "xlsx_multiple_images.xlsx",
+    "dir": "ocr",
+    "ocr": true,
+    "counts": [
+      {
+        "text": "MOCK\\_OCR\\_TEXT\\_12345",
+        "count": 4
+      }
+    ]
+  }
+]

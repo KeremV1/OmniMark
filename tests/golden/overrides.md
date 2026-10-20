@@ -38,3 +38,7 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 
 | Fixture | markitdown-ocr beklentisi | OmniMark beklentisi | Gerekçe |
 | --- | --- | --- | --- |
+| docx_*, pptx_*, xlsx_* | `*[Image OCR]  \n…  \n[End OCR]*` (iki boşluklu satır sonu) | `*[Image OCR]\` + satır sonu (ters bölü sert satır sonu); `\ * _ [ ]` kaçışlı | Son normalizasyon satır sonu boşluklarını siler (00-genel karar 1) |
+| pptx_* | Blok görsel bağlantısının **yerine** | `![alt](yol)` korunur, blok altında | spec §3.2, karar 5 |
+| xlsx_* | `### Images in this sheet:` başlığı + bloklar, `NaN` hücreler | Görsel satırı + altında blok; başlık yok, boş hücre boş | spec §3.2; pandas artefaktı yok |
+| docx (tablo hücresi) | Hücre içinde HTML blok | Tek satır `*[Image OCR] … [End OCR]*` | GFM hücresinde satır sonu olmaz |
