@@ -266,9 +266,14 @@ impl TempPng {
         let path = std::env::temp_dir().join(name);
         let pixels = RgbaImage::from_raw(image.width(), image.height(), image.rgba().to_vec())
             .ok_or_else(|| OcrError::Image("invalid RGBA buffer".into()))?;
-        let file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options
             .open(&path)
             .map_err(|e| OcrError::Image(e.to_string()))?;
         let guard = Self(path);
