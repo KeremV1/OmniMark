@@ -36,6 +36,14 @@ struct FormHeuristics {
     /// Minimum share of table rows for the page to count as a form.
     min_table_ratio: f32,
     min_cell_width: usize,
+    /// Deviation from MarkItDown, on purpose: a run of table rows is only rendered as a
+    /// table when `non_empty_cells / (rows * columns_used) >= this` (`columns_used` counts
+    /// the columns that hold text in the run). MarkItDown turns justified prose and scattered
+    /// formula glyphs into tables that are mostly empty cells; such runs stay plain text.
+    min_run_fill: f32,
+    /// Deviation from MarkItDown, on purpose: a run with fewer rows than this is not a
+    /// table (a single aligned line is never a table).
+    min_run_rows: usize,
 }
 
 const HEURISTICS: FormHeuristics = FormHeuristics {
@@ -55,6 +63,8 @@ const HEURISTICS: FormHeuristics = FormHeuristics {
     cell_margin: 20.0,
     min_table_ratio: 0.2,
     min_cell_width: 3,
+    min_run_fill: 0.5,
+    min_run_rows: 2,
 };
 
 struct LineInfo<'a> {
@@ -146,6 +156,11 @@ pub(crate) fn extract_form_content(words: &[Word], page_width: f32) -> Option<St
         while j < lines.len() && is_table[j] {
             j += 1;
         }
+        if !is_real_table(&lines[i..j], &columns) {
+            out.extend(lines[i..j].iter().map(|l| l.text.clone()));
+            i = j;
+            continue;
+        }
         if out.last().is_some_and(|l| !l.is_empty()) {
             out.push(String::new());
         }
@@ -156,6 +171,23 @@ pub(crate) fn extract_form_content(words: &[Word], page_width: f32) -> Option<St
         i = j;
     }
     Some(out.join("\n"))
+}
+
+/// Run-level sanity filter (deviation from MarkItDown, see `min_run_fill`/`min_run_rows`).
+fn is_real_table(rows: &[LineInfo<'_>], columns: &[f32]) -> bool {
+    let h = &HEURISTICS;
+    if rows.len() < h.min_run_rows {
+        return false;
+    }
+    let cells: Vec<Vec<String>> = rows.iter().map(|r| assign_cells(r, columns)).collect();
+    let non_empty = cells.iter().flatten().filter(|c| !c.is_empty()).count();
+    let columns_used = (0..columns.len())
+        .filter(|&c| cells.iter().any(|row| !row[c].is_empty()))
+        .count();
+    if columns_used == 0 {
+        return false;
+    }
+    non_empty as f32 / (rows.len() * columns_used) as f32 >= h.min_run_fill
 }
 
 fn build_lines(words: &[Word], page_width: f32) -> Vec<LineInfo<'_>> {
@@ -336,5 +368,77 @@ mod tests {
         }
         // First word of every row is ".1": rows are plain text, so the table ratio is 0.
         assert_eq!(extract_form_content(&words, 612.0), None);
+    }
+
+    /// Dense 3x4 table, a plain line, then `sparse` rows (two filled cells each).
+    fn page_with_sparse_run(sparse: &[(f32, f32)]) -> Vec<Word> {
+        let xs = [40.0, 125.0, 210.0, 295.0, 380.0, 465.0];
+        let mut words = Vec::new();
+        for (row, top) in [100.0, 115.0, 130.0].iter().enumerate() {
+            for (col, x) in xs.iter().enumerate() {
+                words.push(w(&format!("d{row}{col}"), *x, *top));
+            }
+        }
+        words.push(w("Mid", 72.0, 160.0));
+        for (k, (a, b)) in sparse.iter().enumerate() {
+            let top = 200.0 + k as f32 * 15.0;
+            words.push(w(&format!("s{k}a"), *a, top));
+            words.push(w(&format!("s{k}b"), *b, top));
+        }
+        words
+    }
+
+    #[test]
+    fn sparse_run_stays_plain_text() {
+        // Fill 6 / (3 rows * 6 columns) = 0.33 < 0.5.
+        let words = page_with_sparse_run(&[(40.0, 125.0), (210.0, 295.0), (380.0, 465.0)]);
+        let md = extract_form_content(&words, 612.0).expect("form page");
+        assert!(md.contains("| d00"), "{md}");
+        assert!(
+            md.contains(
+                "
+Mid
+s0a s0b
+s1a s1b
+s2a s2b"
+            ),
+            "{md}"
+        );
+        assert_eq!(
+            md.lines().filter(|l| l.starts_with("| ---")).count(),
+            1,
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn dense_three_by_three_is_still_a_table() {
+        let mut words = Vec::new();
+        for top in [100.0, 115.0, 130.0] {
+            for (col, x) in [72.0, 200.0, 330.0].iter().enumerate() {
+                words.push(w(&format!("c{col}"), *x, top));
+            }
+        }
+        let md = extract_form_content(&words, 612.0).expect("form page");
+        assert_eq!(md.lines().filter(|l| l.starts_with('|')).count(), 4, "{md}");
+    }
+
+    #[test]
+    fn single_row_run_is_plain_text() {
+        let words = page_with_sparse_run(&[(40.0, 125.0)]);
+        let md = extract_form_content(&words, 612.0).expect("form page");
+        assert!(
+            md.ends_with(
+                "
+Mid
+s0a s0b"
+            ),
+            "{md}"
+        );
+        assert_eq!(
+            md.lines().filter(|l| l.starts_with("| ---")).count(),
+            1,
+            "{md}"
+        );
     }
 }
