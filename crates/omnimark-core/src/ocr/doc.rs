@@ -2,10 +2,11 @@
 
 use std::sync::Arc;
 
+use super::OcrError;
 use super::{decode, OcrCache, OcrEngine, OcrImage, OcrLanguage};
 use crate::cancel::CancelToken;
 use crate::document::{ConvertOptions, Document};
-use crate::error::Result;
+use crate::error::{ConvertError, Result};
 
 /// Added once per document when an image cannot be decoded for OCR.
 pub const DECODE_WARNING: &str = "Some images could not be read for OCR and were skipped.";
@@ -45,7 +46,7 @@ impl DocumentOcr {
             return Ok(hit);
         }
         let text = match decode(bytes) {
-            Ok(Some(image)) => self.run(&image, doc),
+            Ok(Some(image)) => self.run(&image, cancel, doc)?,
             Ok(None) => None,
             Err(_) => {
                 doc.warn_once(DECODE_WARNING);
@@ -68,17 +69,27 @@ impl DocumentOcr {
         if let Some(hit) = self.cache.get(&key) {
             return Ok(hit);
         }
-        let text = self.run(image, doc);
+        let text = self.run(image, cancel, doc)?;
         self.cache.insert(key, text.clone());
         Ok(text)
     }
 
-    fn run(&self, image: &OcrImage, doc: &mut Document) -> Option<String> {
-        match self.engine.recognize(image, &self.language) {
-            Ok(text) => clean_text(&text),
+    /// Only cancellation is an error; an engine failure becomes a warning.
+    fn run(
+        &self,
+        image: &OcrImage,
+        cancel: &CancelToken,
+        doc: &mut Document,
+    ) -> Result<Option<String>> {
+        match self
+            .engine
+            .recognize_cancellable(image, &self.language, cancel)
+        {
+            Ok(text) => Ok(clean_text(&text)),
+            Err(OcrError::Cancelled) => Err(ConvertError::Cancelled),
             Err(error) => {
                 doc.warn_once(&format!("Image OCR failed: {error}"));
-                None
+                Ok(None)
             }
         }
     }
@@ -184,6 +195,18 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Cancelled);
         assert_eq!(engine.calls(), 0);
+    }
+
+    #[test]
+    fn an_engine_reporting_cancellation_cancels_the_conversion() {
+        let engine = Arc::new(MockEngine::failing(OcrError::Cancelled));
+        let mut ocr = ocr_with(&engine);
+        let mut doc = Document::default();
+        let err = ocr
+            .image_bytes(&png_bytes(20, 20, [0; 4]), &CancelToken::new(), &mut doc)
+            .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Cancelled);
+        assert!(doc.warnings.is_empty());
     }
 
     #[test]

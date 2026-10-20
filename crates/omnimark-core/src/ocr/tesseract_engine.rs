@@ -12,6 +12,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
+use crate::cancel::CancelToken;
+
 use super::{OcrEngine, OcrError, OcrImage, OcrLanguage};
 
 pub const TESSERACT_ENV: &str = "OMNIMARK_TESSERACT";
@@ -104,13 +106,14 @@ pub fn resolve_path(configured: Option<&Path>) -> Option<PathBuf> {
     .into_iter()
     .find(|path| {
         is_acceptable(path)
-            && run(path, &[OsStr::new("--version")], PROBE_TIMEOUT).is_ok_and(|out| out.success)
+            && run(path, &[OsStr::new("--version")], PROBE_TIMEOUT, None)
+                .is_ok_and(|out| out.success)
     })
 }
 
 /// Installed language codes (`--list-langs`), without `osd`; empty on any failure.
 pub fn languages(path: &Path) -> Vec<String> {
-    match run(path, &[OsStr::new("--list-langs")], PROBE_TIMEOUT) {
+    match run(path, &[OsStr::new("--list-langs")], PROBE_TIMEOUT, None) {
         Ok(out) => {
             let from_stdout = parse_list_langs(&out.stdout);
             if from_stdout.is_empty() {
@@ -189,8 +192,14 @@ fn collect(handle: JoinHandle<Vec<u8>>) -> String {
     String::from_utf8_lossy(&handle.join().unwrap_or_default()).into_owned()
 }
 
-/// Runs `program args…` without a shell; kills it after `timeout`.
-fn run(program: &Path, args: &[&OsStr], timeout: Duration) -> Result<Output, OcrError> {
+/// Runs `program args…` without a shell; kills it after `timeout` or, with a token, as soon as
+/// that is cancelled (`OcrError::Cancelled`). The child is always reaped.
+fn run(
+    program: &Path,
+    args: &[&OsStr],
+    timeout: Duration,
+    cancel: Option<&CancelToken>,
+) -> Result<Output, OcrError> {
     let mut command = Command::new(program);
     command
         .args(args)
@@ -211,6 +220,11 @@ fn run(program: &Path, args: &[&OsStr], timeout: Duration) -> Result<Output, Ocr
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
+            Ok(None) if cancel.is_some_and(CancelToken::is_cancelled) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(OcrError::Cancelled);
+            }
             Ok(None) if started.elapsed() >= timeout => {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -310,6 +324,26 @@ impl OcrEngine for TesseractEngine {
     }
 
     fn recognize(&self, image: &OcrImage, language: &OcrLanguage) -> Result<String, OcrError> {
+        self.recognize_with(image, language, None)
+    }
+
+    fn recognize_cancellable(
+        &self,
+        image: &OcrImage,
+        language: &OcrLanguage,
+        cancel: &CancelToken,
+    ) -> Result<String, OcrError> {
+        self.recognize_with(image, language, Some(cancel))
+    }
+}
+
+impl TesseractEngine {
+    fn recognize_with(
+        &self,
+        image: &OcrImage,
+        language: &OcrLanguage,
+        cancel: Option<&CancelToken>,
+    ) -> Result<String, OcrError> {
         let langs = lang_arg(*language, &self.languages)?;
         let png = TempPng::write(image)?;
         let args = [
@@ -320,7 +354,7 @@ impl OcrEngine for TesseractEngine {
             OsStr::new("--psm"),
             OsStr::new("3"),
         ];
-        let out = run(&self.path, &args, RECOGNIZE_TIMEOUT)?;
+        let out = run(&self.path, &args, RECOGNIZE_TIMEOUT, cancel)?;
         if !out.success {
             let first = out
                 .stderr
@@ -457,6 +491,34 @@ mod tests {
         assert!(image::open(&path).is_ok());
         drop(png);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn cancelling_kills_a_running_child_promptly() {
+        let cancel = CancelToken::new();
+        let (program, args): (&str, Vec<&OsStr>) = if cfg!(windows) {
+            (
+                r"C:\Windows\System32\PING.EXE",
+                ["-n", "30", "127.0.0.1"].map(OsStr::new).to_vec(),
+            )
+        } else {
+            ("/bin/sleep", vec![OsStr::new("30")])
+        };
+        let flag = cancel.clone();
+        let canceller = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            flag.cancel();
+        });
+        let started = Instant::now();
+        let result = run(
+            Path::new(program),
+            &args,
+            Duration::from_secs(60),
+            Some(&cancel),
+        );
+        canceller.join().unwrap();
+        assert!(matches!(result, Err(OcrError::Cancelled)));
+        assert!(started.elapsed() < Duration::from_secs(10));
     }
 
     #[test]
