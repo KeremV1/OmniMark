@@ -32,7 +32,7 @@ pub use choice::{
 pub use decode::{
     decode, from_dynamic, MAX_DECODE_ALLOC, MAX_INPUT_DIMENSION, MAX_OCR_SIDE, MIN_OCR_SIDE,
 };
-pub use doc::{clean_text, DocumentOcr, DECODE_WARNING};
+pub use doc::{clean_text, DocumentOcr, DECODE_WARNING, MAX_OCR_IMAGES, OCR_LIMIT_WARNING};
 pub use mock::{MockEngine, MOCK_TEXT};
 
 use crate::cancel::CancelToken;

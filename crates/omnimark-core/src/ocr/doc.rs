@@ -11,11 +11,17 @@ use crate::error::{ConvertError, Result};
 /// Added once per document when an image cannot be decoded for OCR.
 pub const DECODE_WARNING: &str = "Some images could not be read for OCR and were skipped.";
 
+/// Most engine calls (cache hits are free) made for one document.
+pub const MAX_OCR_IMAGES: usize = 1000;
+/// Added once per document when [`MAX_OCR_IMAGES`] is reached.
+pub const OCR_LIMIT_WARNING: &str = "OCR stopped after 1000 images in this document.";
+
 /// The batch's engine, the language and a cache that lives for one document.
 pub struct DocumentOcr {
     engine: Arc<dyn OcrEngine>,
     language: OcrLanguage,
     cache: OcrCache,
+    calls: usize,
 }
 
 impl DocumentOcr {
@@ -25,6 +31,7 @@ impl DocumentOcr {
             engine,
             language: options.ocr_language,
             cache: OcrCache::new(),
+            calls: 0,
         })
     }
 
@@ -76,11 +83,16 @@ impl DocumentOcr {
 
     /// Only cancellation is an error; an engine failure becomes a warning.
     fn run(
-        &self,
+        &mut self,
         image: &OcrImage,
         cancel: &CancelToken,
         doc: &mut Document,
     ) -> Result<Option<String>> {
+        if self.calls >= MAX_OCR_IMAGES {
+            doc.warn_once(OCR_LIMIT_WARNING);
+            return Ok(None);
+        }
+        self.calls += 1;
         match self
             .engine
             .recognize_cancellable(image, &self.language, cancel)
@@ -207,6 +219,30 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Cancelled);
         assert!(doc.warnings.is_empty());
+    }
+
+    #[test]
+    fn ocr_stops_after_the_per_document_image_limit() {
+        let engine = Arc::new(MockEngine::default());
+        let mut ocr = ocr_with(&engine);
+        let mut doc = Document::default();
+        let cancel = CancelToken::new();
+        let png = |n: u32| png_bytes(20 + n % 500, 20 + n / 500, [0, 0, 0, 255]);
+        for n in 0..MAX_OCR_IMAGES as u32 {
+            ocr.image_bytes(&png(n), &cancel, &mut doc).unwrap();
+        }
+        assert_eq!(engine.calls(), MAX_OCR_IMAGES);
+        assert!(doc.warnings.is_empty());
+        // A cache hit still answers.
+        assert!(ocr
+            .image_bytes(&png(0), &cancel, &mut doc)
+            .unwrap()
+            .is_some());
+        let over = ocr.image_bytes(&png(5000), &cancel, &mut doc).unwrap();
+        assert_eq!(over, None);
+        ocr.image_bytes(&png(5001), &cancel, &mut doc).unwrap();
+        assert_eq!(engine.calls(), MAX_OCR_IMAGES);
+        assert_eq!(doc.warnings, vec![OCR_LIMIT_WARNING.to_string()]);
     }
 
     #[test]
