@@ -47,3 +47,11 @@ bilerek farklı davrandığı yerler burada gerekçesiyle listelenir. Her dönü
 | pptx_* | Blok görsel bağlantısının **yerine** | `![alt](yol)` korunur, blok altında | spec §3.2, karar 5 |
 | xlsx_* | `### Images in this sheet:` başlığı + bloklar, `NaN` hücreler | Görsel satırı + altında blok; başlık yok, boş hücre boş | spec §3.2; pandas artefaktı yok |
 | docx (tablo hücresi) | Hücre içinde HTML blok | Tek satır `*[Image OCR] … [End OCR]*` | GFM hücresinde satır sonu olmaz |
+
+### PDF tables (M2 fix)
+
+| Fixture | MarkItDown beklentisi | OmniMark beklentisi | Gerekçe |
+| --- | --- | --- | --- |
+| (gerçek PDF'ler, ör. ders notları) | Hizalı satır dizisi, sütun sayısı kaç olursa olsun tablo olur; iki yana yaslı paragraf ve dağınık formül harfleri çoğunlukla boş hücreli tabloya dönüşür | Bir satır dizisi ancak şu dört kuralı geçerse tablo olur, aksi halde düz metin kalır: `min_run_fill` 0,5 (dolu hücre / (satır × kullanılan sütun)), `min_run_rows` 2, `max_prose_gap_ratio` 3,0 (satırın en geniş kelime boşluğu ≤ 3 × yazı boyutu ise "düzyazı benzeri"), `min_prose_row_share` 0,5 (düzyazı benzeri satır payı ≥ 0,5 ise ret) | Sahte tablo gürültüsünü kesmek (spec M2 son inceleme) |
+| (gerçek PDF'ler) | Sayfada hiç tablo kalmasa da sayfa "form" olarak düz satırlarla yazılır | Hiçbir dizi kabul edilmezse sayfa form sayılmaz; normal yerleşim yolu (başlık, paragraf, OCR bloğu yerleşimi) kullanılır | Başlık/paragraf algısı ve OCR yerleşimi korunur |
+| (gerçek PDF'ler) | — | Seyrek (düşük dolulukta) uzun satır dizileri için ayrı bir kural uygulanmadı: doluluk eşiği her uzunluktaki diziye uygulanır | Denendi: yalnız ≤ 3 satırlık dizileri elemek fizik notlarında 363 yerine 1790 tablo satırı üretti (üst sınır 450) |
