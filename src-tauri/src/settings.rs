@@ -8,9 +8,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Language {
-    Auto,
     Tr,
     En,
+    Ru,
+    De,
+    Es,
+    Fr,
+    #[serde(rename = "pt-BR")]
+    PtBr,
+    /// Follow the system language; also what an unknown value in the file becomes.
+    #[serde(other)]
+    Auto,
 }
 
 /// OCR (text recognition) settings; off by default. The engine and language are automatic;
@@ -226,5 +234,21 @@ mod tests {
         s.save(&path).unwrap();
         let saved = std::fs::read_to_string(&path).unwrap();
         assert!(!saved.contains("tesseract") && !saved.contains("\"engine\""));
+    }
+
+    #[test]
+    fn new_languages_round_trip_and_unknown_falls_back_to_auto() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        for (text, expected) in [("ru", Language::Ru), ("de", Language::De), ("es", Language::Es), ("fr", Language::Fr), ("pt-BR", Language::PtBr)] {
+            std::fs::write(&path, format!(r#"{{"workers": 3, "language": "{text}"}}"#)).unwrap();
+            let s = Settings::load(&path, dir.path());
+            assert_eq!(s.language, expected);
+            assert_eq!(serde_json::to_value(s.language).unwrap(), text);
+        }
+        std::fs::write(&path, r#"{"workers": 3, "language": "klingon"}"#).unwrap();
+        let s = Settings::load(&path, dir.path());
+        assert_eq!(s.language, Language::Auto);
+        assert_eq!(s.workers, 3);
     }
 }
