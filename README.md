@@ -21,7 +21,7 @@
 
 **OmniMark**, farklı dosya formatlarını Markdown'a (`.md`) dönüştüren, hafif, hızlı ve çok platformlu bir masaüstü uygulamasıdır.
 
-> **Durum:** ✅ M1 tamamlandı. ✅ M2 (görsel metadata + OCR) tamamlandı: **9/9 görev** ve son inceleme `main`'de. Sıradaki aşama M3 (ses transkripsiyonu); başlamadan önce son bir gözden geçirme yapılacak.
+> **Durum:** ✅ M1 tamamlandı. ✅ M2 (görsel metadata + OCR) tamamlandı: **9/9 görev** ve son inceleme `main`'de, M2 kapandı. Sıradaki aşama M3 (ses transkripsiyonu); kullanıcı uygulamanın tamamını inceledikten sonra başlayacak.
 
 ## Kaldığımız yer
 
@@ -51,24 +51,24 @@
 
 ### Senin kontrol etmen gerekenler
 
-- [ ] **M3'e geçmeden son gözden geçirme:** değiştirmek istediğin bir şey var mı? Aday küçük iyileştirmeler [HANDOFF.md](HANDOFF.md) → "Onay bekleyen kararlar" bölümünde.
-- [ ] **Senin adına verilen kararlar:** aynı bölümde.
+- [ ] **Uygulamanın tamamını tara ve incele** (`npm run tauri dev` ya da kurulu sürüm). Değiştirmek istediklerini not et; M3'ten önce küçük bir turda yapılır.
+- [ ] **Aday küçük iyileştirmeler** ve **senin adına verilen kararlar:** [HANDOFF.md](HANDOFF.md) → "Onay bekleyen kararlar". Tam liste: [docs/m2-ertelenen-bulgular.md](docs/m2-ertelenen-bulgular.md).
 
 ### Sıradaki iş
 
-1. **Son gözden geçirme** (yukarıda). İstersen küçük iyileştirmeler M3'ten önce yapılır.
+1. **Senin incelemen** (yukarıda). Sonuçları bir sonraki oturumda paylaş; istenen değişiklikler önce yapılır.
 2. **M3:** ses transkripsiyonu (yerel Whisper, isteğe bağlı modül). Önce tasarım ve plan, senin onayınla.
 
-Ayrıntı: [HANDOFF.md](HANDOFF.md) · [M2 planı](docs/superpowers/plans/2026-10-19-omnimark-m2/00-genel.md) · [M2 tasarımı](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md) · [M2 ölçümleri](docs/m2-olcumler.md) · [OCR kalite ölçümü](docs/m2-ocr-kalite.md) · [M1 ölçümleri](docs/m1-olcumler.md)
+Ayrıntı: [HANDOFF.md](HANDOFF.md) · [M2 planı](docs/superpowers/plans/2026-10-19-omnimark-m2/00-genel.md) · [M2 tasarımı](docs/superpowers/specs/2026-10-19-omnimark-m2-design.md) · [M2 ölçümleri](docs/m2-olcumler.md) · [OCR kalite ölçümü](docs/m2-ocr-kalite.md) · [M2 ertelenen bulgular](docs/m2-ertelenen-bulgular.md) · [M1 ölçümleri](docs/m1-olcumler.md)
 
 ## Desteklenen formatlar
 
 | Format | Uzantılar | Çıktı |
 | --- | --- | --- |
-| PDF | `.pdf` | Metin, mümkünse tablolar |
-| Word | `.docx` | Başlıklar, listeler, tablolar, bağlantılar, formüller (LaTeX) |
-| Excel | `.xlsx`, `.xlsm`, `.xls`, `.ods` | Her sayfa için ayrı başlık ve Markdown tablosu |
-| PowerPoint | `.pptx` | Slayt slayt başlıklar, metinler, tablolar, grafik verileri, konuşmacı notları |
+| PDF | `.pdf` | Metin, mümkünse tablolar; isteğe bağlı OCR (gömülü görseller ve taranmış sayfalar) |
+| Word | `.docx` | Başlıklar, listeler, tablolar, bağlantılar, formüller (LaTeX); görsellerde isteğe bağlı OCR |
+| Excel | `.xlsx`, `.xlsm`, `.xls`, `.ods` | Her sayfa için ayrı başlık ve Markdown tablosu; `.xlsx` görsellerinde isteğe bağlı OCR |
+| PowerPoint | `.pptx` | Slayt slayt başlıklar, metinler, tablolar, grafik verileri, konuşmacı notları; görsellerde isteğe bağlı OCR |
 | HTML | `.html`, `.htm` | Gövde içeriği; script ve stil blokları ayıklanır |
 | Görsel | `.png`, `.jpg`, `.jpeg`, `.webp` … | EXIF/XMP metadata, isteğe bağlı OCR |
 | Ses (M3) | `.wav`, `.mp3`, `.m4a` … | Metadata, isteğe bağlı konuşmadan metne çeviri |
@@ -76,23 +76,26 @@ Ayrıntı: [HANDOFF.md](HANDOFF.md) · [M2 planı](docs/superpowers/plans/2026-1
 
 Ses M3'te gelecek. Kütüphane seçimleri: [docs/research/](docs/research/).
 
-OCR ve ses transkripsiyonu **isteğe bağlı modüller**: OCR varsayılan kapalı. Windows'un kendi OCR'ı indirme gerektirmez. Tesseract sistemde kuruluysa kullanılır. ocrs modeli (~12 MB) yalnız istenirse iner. Böylece temel kurulum küçük kalır.
+OCR ve ses transkripsiyonu **isteğe bağlı modüller**: OCR varsayılan kapalı. Windows'un kendi OCR'ı indirme gerektirmez. Tesseract sistemde kuruluysa kullanılır (macOS: `brew install tesseract tesseract-lang`, Linux: `sudo apt install tesseract-ocr tesseract-ocr-eng tesseract-ocr-tur`). ocrs modeli (~12 MB) yalnız istenirse iner. Böylece temel kurulum küçük kalır. OCR metni çıktıda `*[Image OCR]` … `[End OCR]*` blokları içinde yer alır.
 
 ## Kullanım akışı
 
 1. OmniMark'ı aç.
-2. Dosyaları pencereye sürükle-bırak ya da **Dosya Ekle** ile seç.
-3. Dosyalar kuyrukta listelenir: ad, tür, boyut, durum.
-4. **Markdown Oluştur**'a bas; ilerleme ve hatalar dosya bazında gösterilir.
-5. Markdown dosyaları seçtiğin klasöre kaydedilir.
-6. Çıktı klasörünü aç ya da sonucu uygulama içinde önizle.
+2. İstersen **Ayarlar → OCR**'dan görsellerdeki metnin okunmasını aç; motor ve dil "Otomatik" kalabilir.
+3. Dosyaları pencereye sürükle-bırak ya da **Dosya Ekle** ile seç.
+4. Dosyalar kuyrukta listelenir: ad, tür, boyut, durum.
+5. **Markdown Oluştur**'a bas. İlerleme ve hatalar dosya bazında gösterilir; dönüşen dosyanın yanındaki ✕ ya da alttaki **İptal** işlemi durdurur.
+6. Markdown dosyaları seçtiğin klasöre kaydedilir.
+7. Çıktı klasörünü aç ya da sonucu uygulama içinde önizle.
 
 ## Mimari
 
 ```
 OmniMark
 ├── Rust çekirdeği      dosya okuma, format tespiti, dönüştürücüler
-│   └── her format için ayrı dönüştürücü modülü (pdf, docx, xlsx, pptx, html, image, audio …)
+│   ├── her format için ayrı dönüştürücü modülü (pdf, docx, xlsx, pptx, html, image …)
+│   └── OCR katmanı     ortak motor arayüzü: Windows OCR · Tesseract · ocrs; önbellek ve sınırlar
+├── Komut satırı (CLI)  omnimark convert / models fetch
 ├── Tauri 2 kabuğu      pencere, sürükle-bırak, dosya/klasör diyalogları, işletim sistemi entegrasyonu
 └── Arayüz              HTML/CSS/TypeScript; kuyruk, ilerleme, önizleme
 ```
@@ -105,13 +108,13 @@ Dönüştürme akışı MarkItDown'daki modelden uyarlanıyor: her dönüştür�
 | --- | --- | --- | --- | --- |
 | **M1** | Uygulama iskeleti, sürükle-bırak kuyruğu, dönüştürme akışı, önizleme; PDF, Word, Excel, PowerPoint, HTML, CSV, TXT/JSON | 1 · 2 · 3 · 4 | ✅ Tamamlandı | 19/19 görev |
 | **M2** | Görsel metadata (EXIF) ve OCR (isteğe bağlı modül) | 5 | ✅ Tamamlandı | 9/9 görev |
-| **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏳ Planlandı | — |
+| **M3** | Ses transkripsiyonu (yerel Whisper, isteğe bağlı modül) | 6 | ⏭ Sıradaki (kullanıcı incelemesinden sonra) | — |
 | **M4** | Sağlamlaştırma: hata yönetimi, ek testler, performans iyileştirmeleri | 7 | ⏳ Planlandı | — |
 | **M5** | Windows, macOS ve Linux kurulum paketleri, imzalama | 8 | ⏳ Planlandı | — |
 
 Yol haritası adımları: **1** proje iskeleti ve temel arayüz · **2** sürükle-bırak ve dosya kuyruğu · **3** ilk çalışan Markdown dönüştürme akışı · **4** PDF, DOCX, XLSX, PPTX ve HTML desteği · **5** görsel metadata ve OCR · **6** ses transkripsiyonu · **7** hata yönetimi, testler ve performans · **8** Windows, macOS ve Linux paketleri.
 
-Durum işaretleri: ✅ tamamlandı · 🔄 sürüyor · ⏳ planlandı.
+Durum işaretleri: ✅ tamamlandı · 🔄 sürüyor · ⏭ sıradaki · ⏳ planlandı.
 
 **Temel ilke:** Önce küçük, çalışan ve güvenilir bir uygulama; ardından formatlar ve gelişmiş özellikler aşamalı olarak eklenir. Tüm platformlarda aynı temel deneyim korunur.
 
@@ -148,6 +151,8 @@ scripts/fetch-tesseract.ps1                               # isteğe bağlı: OCR
 ```
 
 Not: proje yolunda `&` varsa npm/tauri komutlarını üst klasörü `subst O: "<üst klasör>"` ile bağlayıp `O:\OmniMark` üzerinden çalıştır; bitince `subst O: /D`.
+
+Disk alanı: Rust derleme önbelleği (`target/`, git dışı) geliştirme sırasında 15-20 GB'a çıkabilir. Bu normaldir; `cargo clean` ile güvenle silinir. İlk derleme sonra birkaç dakika sürer.
 
 Araştırma notları:
 
