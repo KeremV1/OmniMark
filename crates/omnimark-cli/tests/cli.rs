@@ -144,3 +144,28 @@ fn ocr_values_are_validated_and_documented() {
     );
     assert!(help.contains("tesseract"));
 }
+
+#[test]
+fn stdout_mode_prints_warnings_to_stderr() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let vendored = root
+        .join("vendor/pdfium")
+        .join(omnimark_core::formats::pdfium_library_file_name());
+    let scanned = root.join("tests/fixtures/markitdown/ocr/pdf_scanned_minimal.pdf");
+    if !vendored.is_file() || !scanned.is_file() {
+        eprintln!("skipped: pdfium or the scanned fixture is missing");
+        return;
+    }
+    let output = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+        .env("OMNIMARK_PDFIUM_PATH", &vendored)
+        .args(["convert", "--stdout"])
+        .arg(&scanned)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("warning ") && stderr.contains("pdf_scanned_minimal.pdf"),
+        "{stderr}"
+    );
+}

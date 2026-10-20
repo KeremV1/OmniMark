@@ -248,7 +248,12 @@ fn convert(args: ConvertArgs) -> ExitCode {
                 progress: &progress,
             };
             match convert_isolated(&registry, input, &mut ctx) {
-                Ok(document) => println!("{}", document.markdown),
+                Ok(document) => {
+                    println!("{}", document.markdown);
+                    for warning in &document.warnings {
+                        eprintln!("warning {}: {warning}", input.display());
+                    }
+                }
                 Err(error) => {
                     eprintln!("error {}: {error}", input.display());
                     failed = true;
