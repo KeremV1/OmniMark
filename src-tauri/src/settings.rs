@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use omnimark_core::ocr::{EngineConfig, OcrChoice, OcrLanguage};
+use omnimark_core::ocr::{EngineConfig, EngineKind, OcrChoice, OcrLanguage};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,9 +129,12 @@ impl Settings {
         omnimark_core::output::write_atomic(path, &json)
     }
 }
-/// The OCR language to use: `Auto` follows the interface language (itself `Auto` = system).
-pub fn effective_ocr_language(settings: &Settings) -> OcrLanguage {
+/// The OCR language to use: `Auto` follows the interface language (itself `Auto` = system),
+/// except for Tesseract, whose own `Auto` picks `tur+eng` from what is installed (an explicit
+/// language is strict there and would fail when its data is missing).
+pub fn effective_ocr_language(settings: &Settings, engine: Option<EngineKind>) -> OcrLanguage {
     match (settings.ocr.language, settings.language) {
+        (OcrLanguage::Auto, _) if engine == Some(EngineKind::Tesseract) => OcrLanguage::Auto,
         (OcrLanguage::Auto, Language::Tr) => OcrLanguage::Tr,
         (OcrLanguage::Auto, Language::En) => OcrLanguage::En,
         (language, _) => language,
@@ -262,10 +265,29 @@ mod tests {
     #[test]
     fn auto_ocr_language_follows_the_interface_language() {
         let mut s = Settings::defaults(Path::new("/x"));
-        assert_eq!(effective_ocr_language(&s), OcrLanguage::Auto);
+        assert_eq!(effective_ocr_language(&s, None), OcrLanguage::Auto);
         s.language = Language::Tr;
-        assert_eq!(effective_ocr_language(&s), OcrLanguage::Tr);
+        for kind in [EngineKind::Windows, EngineKind::Ocrs] {
+            assert_eq!(effective_ocr_language(&s, Some(kind)), OcrLanguage::Tr);
+        }
+        s.language = Language::En;
+        assert_eq!(
+            effective_ocr_language(&s, Some(EngineKind::Ocrs)),
+            OcrLanguage::En
+        );
         s.ocr.language = OcrLanguage::En;
-        assert_eq!(effective_ocr_language(&s), OcrLanguage::En);
+        assert_eq!(effective_ocr_language(&s, None), OcrLanguage::En);
+    }
+
+    #[test]
+    fn auto_ocr_language_stays_auto_for_tesseract_but_explicit_stays_strict() {
+        let mut s = Settings::defaults(Path::new("/x"));
+        s.language = Language::Tr;
+        let t = Some(EngineKind::Tesseract);
+        assert_eq!(effective_ocr_language(&s, t), OcrLanguage::Auto);
+        s.ocr.language = OcrLanguage::Tr;
+        assert_eq!(effective_ocr_language(&s, t), OcrLanguage::Tr);
+        s.ocr.language = OcrLanguage::En;
+        assert_eq!(effective_ocr_language(&s, t), OcrLanguage::En);
     }
 }

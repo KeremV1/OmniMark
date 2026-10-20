@@ -81,10 +81,12 @@ pub async fn convert(
         let mut ocr_warning = None;
         // One engine per batch, built here (never at startup) and dropped with `request`.
         if settings.ocr.enabled {
-            match build_engine(settings.ocr.engine, &settings.engine_config(&models_root)) {
+            let config = settings.engine_config(&models_root);
+            let kind = select(settings.ocr.engine, &availability(&config));
+            match build_engine(settings.ocr.engine, &config) {
                 Ok(engine) => {
                     options.ocr = Some(engine);
-                    options.ocr_language = effective_ocr_language(&settings);
+                    options.ocr_language = effective_ocr_language(&settings, kind);
                 }
                 Err(e) => ocr_warning = Some(format!("OCR was skipped: {e}.")),
             }
