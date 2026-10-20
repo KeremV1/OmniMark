@@ -1,7 +1,20 @@
 import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { openLogDir, pickFolder, type Settings, type SettingsLanguage } from '../api';
-import { t } from '../i18n';
+import {
+  cancelDownload,
+  downloadOcrModels,
+  ocrStatus,
+  openLogDir,
+  openTesseractPage,
+  pickFolder,
+  pickProgram,
+  type OcrEngineChoice,
+  type OcrLanguage,
+  type OcrStatus,
+  type Settings,
+  type SettingsLanguage,
+} from '../api';
+import { getLang, t, type Lang } from '../i18n';
 import { h, icons, setText, svg } from './dom';
 
 export interface SettingsDialogOptions {
@@ -22,9 +35,31 @@ export function setDialogError(line: Pick<HTMLElement, 'textContent' | 'hidden'>
   line.hidden = text === null;
 }
 
+/** "12,2 MB" (tr) or "12.2 MB" (en): decimal megabytes with one decimal. */
+export function formatMegabytes(bytes: number, lang: Lang): string {
+  return `${new Intl.NumberFormat(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(bytes / 1_000_000)} MB`;
+}
+
+/** One line per engine, then a note when nothing is usable or ocrs is chosen for Turkish. `language` is the resolved OCR language. */
+export function ocrStatusLines(status: OcrStatus, language: 'tr' | 'en' | 'auto'): string[] {
+  const lines: string[] = [];
+  if (status.windowsBuilt) {
+    lines.push(status.windowsLanguages.length > 0 ? t('ocr.windowsReady', { langs: status.windowsLanguages.join(', ') }) : t('ocr.windowsNoLanguage'));
+  }
+  lines.push(
+    status.tesseractPath && status.tesseractLanguages.length > 0
+      ? t('ocr.tesseractReady', { path: status.tesseractPath, langs: status.tesseractLanguages.join(', ') })
+      : t('ocr.tesseractMissing'),
+  );
+  if (status.ocrsBuilt) lines.push(t(status.ocrsModels ? 'ocr.ocrsReady' : 'ocr.ocrsMissing'));
+  if (status.selected === null) lines.push(t('ocr.none'));
+  if (status.selected === 'ocrs' && language === 'tr') lines.push(t('ocr.ocrsTurkish'));
+  return lines;
+}
+
 /** Opens the modal settings dialog. The dialog removes itself when closed. */
 export function openSettingsDialog({ settings, onSave, describeError }: SettingsDialogOptions): HTMLDialogElement {
-  const draft: Settings = { ...settings };
+  const draft: Settings = { ...settings, ocr: { ...settings.ocr } };
   const errorLine = h('p', { class: 'dialog-error', role: 'alert', hidden: true });
   const onError = (error: unknown): void => {
     console.error(error);
@@ -69,6 +104,151 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     h('option', { value: 'en', lang: 'en' }, t('settings.languageEn')),
   ) as HTMLSelectElement;
   language.value = draft.language;
+
+  // ---- OCR section ----
+  const ocrEnabled = h('input', { type: 'checkbox', id: 'set-ocr' }) as HTMLInputElement;
+  ocrEnabled.checked = draft.ocr.enabled;
+
+  const engine = h(
+    'select',
+    { id: 'set-ocr-engine' },
+    h('option', { value: 'auto' }, t('settings.ocrEngineAuto')),
+    h('option', { value: 'windows' }, t('settings.ocrEngineWindows')),
+    h('option', { value: 'tesseract' }, t('settings.ocrEngineTesseract')),
+    h('option', { value: 'ocrs' }, t('settings.ocrEngineOcrs')),
+  ) as HTMLSelectElement;
+  engine.value = draft.ocr.engine;
+
+  const tesseractPathText = h('span', { class: 'field-path' });
+  const showTesseractPath = (): void => {
+    const path = draft.ocr.tesseractPath;
+    setText(tesseractPathText, path ?? t('settings.tesseractPathAuto'));
+    tesseractPathText.title = path ?? '';
+    tesseractPathText.classList.toggle('is-placeholder', path === null);
+  };
+  const chooseTesseract = h('button', { class: 'btn btn-small', type: 'button' }, t('settings.tesseractChoose'));
+  const clearTesseract = h('button', { class: 'btn btn-quiet btn-small', type: 'button' }, t('settings.tesseractClear'));
+  const tesseractField = h(
+    'div',
+    { class: 'field' },
+    h('span', { class: 'field-label', id: 'set-tesseract-label' }, t('settings.tesseractPath')),
+    h('div', { class: 'field-row', role: 'group', 'aria-labelledby': 'set-tesseract-label' }, tesseractPathText, chooseTesseract, clearTesseract),
+  );
+  const refreshTesseractField = (): void => {
+    tesseractField.hidden = engine.value !== 'auto' && engine.value !== 'tesseract';
+    clearTesseract.hidden = draft.ocr.tesseractPath === null;
+    showTesseractPath();
+  };
+
+  const ocrLanguage = h(
+    'select',
+    { id: 'set-ocr-lang' },
+    h('option', { value: 'auto' }, t('settings.ocrLanguageAuto')),
+    h('option', { value: 'tr', lang: 'tr' }, t('settings.languageTr')),
+    h('option', { value: 'en', lang: 'en' }, t('settings.languageEn')),
+  ) as HTMLSelectElement;
+  ocrLanguage.value = draft.ocr.language;
+
+  const statusList = h('ul', { class: 'ocr-status', 'aria-live': 'polite' }, h('li', {}, t('ocr.statusLoading')));
+  const installLink = h('a', { href: '#', class: 'about-link', hidden: true }, t('ocr.tesseractInstall'));
+  installLink.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    setDialogError(errorLine, null);
+    openTesseractPage().catch(onError);
+  });
+  const downloadButton = h('button', { class: 'btn btn-small', type: 'button', hidden: true }) as HTMLButtonElement;
+  const progress = h('progress', { max: 100, value: 0, 'aria-label': t('settings.ocr') }) as HTMLProgressElement;
+  const progressText = h('span', { class: 'ocr-progress-text' });
+  const stopButton = h('button', { class: 'btn btn-quiet btn-small', type: 'button' }, t('ocr.downloadCancel'));
+  const progressRow = h('div', { class: 'ocr-progress', hidden: true }, progress, progressText, stopButton);
+
+  let status: OcrStatus | null = null;
+  let downloading = false;
+  const resolvedOcrLanguage = (): 'tr' | 'en' | 'auto' => (ocrLanguage.value === 'auto' ? getLang() : (ocrLanguage.value as 'tr' | 'en'));
+  const renderStatus = (): void => {
+    if (!status) return;
+    statusList.replaceChildren(...ocrStatusLines(status, resolvedOcrLanguage()).map((line) => h('li', {}, line)));
+    installLink.hidden = status.tesseractPath !== null && status.tesseractLanguages.length > 0;
+    const needsModel = status.ocrsBuilt && !status.ocrsModels;
+    downloadButton.hidden = !needsModel || downloading;
+    progressRow.hidden = !downloading;
+    setText(downloadButton, t('ocr.download', { size: formatMegabytes(status.ocrsDownloadBytes, getLang()) }));
+    // The Windows engine cannot be chosen where it is not built in.
+    (engine.querySelector('option[value="windows"]') as HTMLOptionElement).disabled = !status.windowsBuilt;
+  };
+  const refreshStatus = (): void => {
+    ocrStatus()
+      .then((next) => {
+        status = next;
+        renderStatus();
+      })
+      .catch((err: unknown) => {
+        console.warn('OCR status unavailable', err);
+        setText(statusList, '');
+      });
+  };
+  const setProgress = (percent: number): void => {
+    progress.value = percent;
+    setText(progressText, t('ocr.downloading', { percent }));
+  };
+  downloadButton.addEventListener('click', () => {
+    setDialogError(errorLine, null);
+    downloading = true;
+    setProgress(0);
+    renderStatus();
+    downloadOcrModels((e) => {
+      if (e.event === 'progress') {
+        setProgress(e.data.total > 0 ? Math.min(100, Math.floor((e.data.downloaded * 100) / e.data.total)) : 0);
+      } else if (e.event === 'failed') {
+        setDialogError(errorLine, t('ocr.downloadFailed', { message: e.data.message }));
+      }
+    })
+      .catch(onError)
+      .finally(() => {
+        downloading = false;
+        renderStatus();
+        refreshStatus();
+      });
+  });
+  stopButton.addEventListener('click', () => {
+    cancelDownload().catch(onError);
+  });
+  chooseTesseract.addEventListener('click', async () => {
+    setDialogError(errorLine, null);
+    try {
+      const picked = await pickProgram();
+      if (picked) {
+        draft.ocr.tesseractPath = picked;
+        refreshTesseractField();
+      }
+    } catch (err) {
+      onError(err);
+    }
+  });
+  clearTesseract.addEventListener('click', () => {
+    draft.ocr.tesseractPath = null;
+    refreshTesseractField();
+  });
+  engine.addEventListener('change', refreshTesseractField);
+  ocrLanguage.addEventListener('change', renderStatus);
+  refreshTesseractField();
+  refreshStatus();
+
+  const ocrSection = h(
+    'fieldset',
+    { class: 'ocr' },
+    h('legend', {}, t('settings.ocr')),
+    h(
+      'div',
+      { class: 'field field-check' },
+      ocrEnabled,
+      h('label', { for: 'set-ocr' }, h('span', {}, t('settings.ocrEnabled')), h('small', { class: 'hint' }, t('settings.ocrEnabledHint'))),
+    ),
+    h('div', { class: 'field field-inline' }, h('label', { for: 'set-ocr-engine' }, t('settings.ocrEngine')), engine),
+    tesseractField,
+    h('div', { class: 'field field-inline' }, h('label', { for: 'set-ocr-lang' }, t('settings.ocrLanguage')), ocrLanguage),
+    h('div', { class: 'field' }, statusList, installLink, downloadButton, progressRow),
+  );
 
   const logs = h('button', { class: 'btn btn-quiet btn-small', type: 'button' }, svg(icons.folder), t('settings.openLogs'));
   logs.addEventListener('click', () => {
@@ -123,6 +303,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
       workers,
     ),
     h('div', { class: 'field field-inline' }, h('label', { for: 'set-lang' }, t('settings.language')), language),
+    ocrSection,
     h('div', { class: 'field' }, logs),
     about,
     errorLine,
@@ -133,13 +314,22 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
   form.querySelector('h2')?.setAttribute('id', 'settings-title');
 
   cancel.addEventListener('click', () => dialog.close());
-  dialog.addEventListener('close', () => dialog.remove());
+  dialog.addEventListener('close', () => {
+    if (downloading) cancelDownload().catch((err: unknown) => console.warn('cancel download failed', err));
+    dialog.remove();
+  });
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const n = Math.round(Number(workers.value));
     draft.workers = Number.isFinite(n) ? Math.min(MAX_WORKERS, Math.max(MIN_WORKERS, n)) : settings.workers;
     draft.extractImages = images.checked;
     draft.language = language.value as SettingsLanguage;
+    draft.ocr = {
+      enabled: ocrEnabled.checked,
+      engine: engine.value as OcrEngineChoice,
+      language: ocrLanguage.value as OcrLanguage,
+      tesseractPath: draft.ocr.tesseractPath,
+    };
     save.disabled = true;
     setDialogError(errorLine, null);
     try {

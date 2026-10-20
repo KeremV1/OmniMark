@@ -8,7 +8,7 @@
  */
 import type { Channel } from '@tauri-apps/api/core';
 import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import type { ConvertEvent, FileEntry, Settings } from './api';
+import type { ConvertEvent, DownloadEvent, FileEntry, OcrStatus, Settings } from './api';
 import type { Actions } from './ui/context';
 
 const DIR = 'C:\\Users\\Kerem\\Documents\\Raporlar';
@@ -54,7 +54,9 @@ let settings: Settings = {
   extractImages: true,
   workers: 2,
   language: forcedLang === 'en' || forcedLang === 'tr' ? forcedLang : 'auto',
+  ocr: { enabled: false, engine: 'auto', language: 'auto', tesseractPath: null },
 };
+let cancelDownload = false;
 let cancelRun: (() => void) | null = null;
 
 function outputOf(path: string): string {
@@ -111,6 +113,31 @@ async function fakeConvert(files: string[], channel: Channel<ConvertEvent>): Pro
   send({ event: 'finished', data: { ok, failed, cancelled: nCancelled } });
 }
 
+async function fakeDownload(channel: Channel<DownloadEvent>): Promise<void> {
+  cancelDownload = false;
+  for (let percent = 0; percent <= 100; percent += 20) {
+    if (cancelDownload) {
+      channel.onmessage({ event: 'cancelled' });
+      return;
+    }
+    channel.onmessage({ event: 'progress', data: { downloaded: Math.round(percent * 122_126.56), total: 12_212_656 } });
+    await wait(80);
+  }
+  channel.onmessage({ event: cancelDownload ? 'cancelled' : 'finished' } as DownloadEvent);
+}
+
+const OCR_STATUS: OcrStatus = {
+  windowsBuilt: true,
+  windowsLanguages: ['tr'],
+  tesseractPath: null,
+  tesseractLanguages: [],
+  ocrsBuilt: true,
+  ocrsModels: false,
+  ocrsDownloadBytes: 12_212_656,
+  selected: 'windows',
+  downloading: false,
+};
+
 export function installDevMock(): void {
   mockWindows('main');
   mockConvertFileSrc('windows');
@@ -149,6 +176,13 @@ export function installDevMock(): void {
             ],
             headingsTruncated: true,
           };
+        case 'ocr_status':
+          return OCR_STATUS;
+        case 'download_ocr_models':
+          return fakeDownload(args.onEvent as Channel<DownloadEvent>);
+        case 'cancel_download':
+          cancelDownload = true;
+          return null;
         case 'plugin:app|version':
           return '0.1.0';
         case 'plugin:dialog|open':

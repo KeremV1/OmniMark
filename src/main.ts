@@ -39,7 +39,13 @@ import { createToolbar } from './ui/toolbar';
 /** Most files one folder drop may add (mirrors the backend limit). */
 const FOLDER_FILE_LIMIT = 1000;
 
-const FALLBACK_SETTINGS: Settings = { outputDir: '', extractImages: true, workers: 2, language: 'auto' };
+const FALLBACK_SETTINGS: Settings = {
+  outputDir: '',
+  extractImages: true,
+  workers: 2,
+  language: 'auto',
+  ocr: { enabled: false, engine: 'auto', language: 'auto', tesseractPath: null },
+};
 
 let view: View = {
   queue: emptyQueue(),

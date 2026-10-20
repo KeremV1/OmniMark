@@ -55,6 +55,8 @@ pub struct BatchRequest {
     pub output_dir: PathBuf,
     pub options: ConvertOptions,
     pub workers: usize,
+    /// Added to the warnings of every finished file (for example "OCR was skipped").
+    pub ocr_warning: Option<String>,
 }
 
 enum Outcome {
@@ -91,12 +93,11 @@ pub fn run_batch(
                 let Some(path) = request.files.get(index) else {
                     break;
                 };
-                let counter =
-                    match convert_one(registry, &allocator, path, &request.options, cancel, emit) {
-                        Outcome::Ok => &ok,
-                        Outcome::Failed => &failed,
-                        Outcome::Cancelled => &cancelled,
-                    };
+                let counter = match convert_one(registry, &allocator, path, request, cancel, emit) {
+                    Outcome::Ok => &ok,
+                    Outcome::Failed => &failed,
+                    Outcome::Cancelled => &cancelled,
+                };
                 counter.fetch_add(1, Ordering::Relaxed);
             });
         }
@@ -112,10 +113,11 @@ fn convert_one(
     registry: &Registry,
     allocator: &OutputAllocator,
     path: &Path,
-    options: &ConvertOptions,
+    request: &BatchRequest,
     cancel: &CancelToken,
     emit: &(dyn Fn(ConvertEvent) + Sync),
 ) -> Outcome {
+    let options = &request.options;
     let shown = path.display().to_string();
     if cancel.is_cancelled() {
         emit(ConvertEvent::FileCancelled { path: shown });
@@ -163,7 +165,11 @@ fn convert_one(
             emit(ConvertEvent::FileFinished {
                 path: shown,
                 output: target.markdown_path.display().to_string(),
-                warnings: document.warnings,
+                warnings: document
+                    .warnings
+                    .into_iter()
+                    .chain(request.ocr_warning.clone())
+                    .collect(),
             });
             Outcome::Ok
         }
@@ -214,6 +220,7 @@ mod tests {
             output_dir: out.clone(),
             options: ConvertOptions::default(),
             workers: 2,
+            ocr_warning: None,
         };
         let registry = default_registry(&RegistryConfig::default());
         let events = collect(&registry, &request, &CancelToken::new());
@@ -248,6 +255,7 @@ mod tests {
             output_dir: dir.path().join("out"),
             options: ConvertOptions::default(),
             workers: 1,
+            ocr_warning: None,
         };
         let events = collect(
             &default_registry(&RegistryConfig::default()),
@@ -265,5 +273,24 @@ mod tests {
                 cancelled: 1
             })
         );
+    }
+
+    #[test]
+    fn ocr_warning_is_added_to_every_finished_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "x").unwrap();
+        let request = BatchRequest {
+            files: vec![dir.path().join("a.txt")],
+            output_dir: dir.path().join("out"),
+            options: ConvertOptions::default(),
+            workers: 1,
+            ocr_warning: Some("OCR was skipped: none.".into()),
+        };
+        let events = collect(
+            &default_registry(&RegistryConfig::default()),
+            &request,
+            &CancelToken::new(),
+        );
+        assert!(events.iter().any(|e| matches!(e, ConvertEvent::FileFinished { warnings, .. } if warnings == &vec!["OCR was skipped: none.".to_string()])));
     }
 }

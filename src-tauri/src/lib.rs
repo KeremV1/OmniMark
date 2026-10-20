@@ -17,6 +17,9 @@ pub struct AppState {
     pub settings_path: std::path::PathBuf,
     pub default_output_dir: std::path::PathBuf,
     pub running: Mutex<Option<omnimark_core::CancelToken>>,
+    /// Where downloaded OCR models live (`<app local data>/models`).
+    pub models_root: std::path::PathBuf,
+    pub downloading: Mutex<Option<omnimark_core::CancelToken>>,
 }
 
 /// Dependencies log at Warn and the app at Info. The HTML parser crates are silenced: at
@@ -63,6 +66,8 @@ pub fn run() {
                 settings_path,
                 default_output_dir: default_out,
                 running: Mutex::new(None),
+                models_root: app.path().app_local_data_dir()?.join("models"),
+                downloading: Mutex::new(None),
             });
             webview_mem::build_main_window(app)?;
             Ok(())
@@ -78,7 +83,10 @@ pub fn run() {
             commands::trim_memory,
             commands::open_log_dir,
             commands::get_settings,
-            commands::set_settings
+            commands::set_settings,
+            commands::ocr_status,
+            commands::download_ocr_models,
+            commands::cancel_download
         ])
         .run(tauri::generate_context!())
         .expect("error while running OmniMark");

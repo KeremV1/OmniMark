@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use omnimark_core::ocr::{EngineConfig, OcrChoice, OcrLanguage};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -10,6 +11,27 @@ pub enum Language {
     Auto,
     Tr,
     En,
+}
+
+/// OCR (text recognition) settings; off by default.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct OcrSettings {
+    pub enabled: bool,
+    pub engine: OcrChoice,
+    pub language: OcrLanguage,
+    pub tesseract_path: Option<PathBuf>,
+}
+
+impl Default for OcrSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            engine: OcrChoice::Auto,
+            language: OcrLanguage::Auto,
+            tesseract_path: None,
+        }
+    }
 }
 
 /// Missing fields take their defaults, so an older or partial file keeps the fields it has
@@ -21,6 +43,7 @@ pub struct Settings {
     pub extract_images: bool,
     pub workers: usize,
     pub language: Language,
+    pub ocr: OcrSettings,
 }
 
 /// Folder name created under the base folder for converted files.
@@ -60,6 +83,7 @@ impl Settings {
             extract_images: true,
             workers: default_workers(),
             language: Language::Auto,
+            ocr: OcrSettings::default(),
         }
     }
 
@@ -79,7 +103,22 @@ impl Settings {
         if !self.output_dir.is_absolute() {
             self.output_dir = default_output_dir.to_path_buf();
         }
+        if self
+            .ocr
+            .tesseract_path
+            .as_ref()
+            .is_some_and(|p| !p.is_absolute())
+        {
+            self.ocr.tesseract_path = None;
+        }
         self
+    }
+
+    pub fn engine_config(&self, models_root: &Path) -> EngineConfig {
+        EngineConfig {
+            models_root: Some(models_root.to_path_buf()),
+            tesseract_path: self.ocr.tesseract_path.clone(),
+        }
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
@@ -90,6 +129,15 @@ impl Settings {
         omnimark_core::output::write_atomic(path, &json)
     }
 }
+/// The OCR language to use: `Auto` follows the interface language (itself `Auto` = system).
+pub fn effective_ocr_language(settings: &Settings) -> OcrLanguage {
+    match (settings.ocr.language, settings.language) {
+        (OcrLanguage::Auto, Language::Tr) => OcrLanguage::Tr,
+        (OcrLanguage::Auto, Language::En) => OcrLanguage::En,
+        (language, _) => language,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +222,50 @@ mod tests {
             Some(PathBuf::from("/data/OmniMark"))
         );
         assert_eq!(default_output_dir(None, None, None), None);
+    }
+
+    #[test]
+    fn old_files_get_ocr_defaults_and_ocr_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, r#"{"outputDir": "/x", "workers": 2}"#).unwrap();
+        let s = Settings::load(&path, dir.path());
+        assert_eq!(s.ocr, OcrSettings::default());
+        assert!(!s.ocr.enabled);
+        let mut on = Settings::defaults(dir.path());
+        let tesseract = dir.path().join("tesseract.exe");
+        on.ocr = OcrSettings {
+            enabled: true,
+            engine: OcrChoice::Tesseract,
+            language: OcrLanguage::Tr,
+            tesseract_path: Some(tesseract.clone()),
+        };
+        on.save(&path).unwrap();
+        assert_eq!(Settings::load(&path, dir.path()).ocr, on.ocr);
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains(r#""engine": "tesseract""#));
+        let config = on.engine_config(dir.path());
+        assert_eq!(config.tesseract_path, Some(tesseract));
+        assert_eq!(config.models_root.as_deref(), Some(dir.path()));
+        std::fs::write(
+            &path,
+            r#"{"ocr": {"enabled": true, "tesseractPath": "relative/tesseract"}}"#,
+        )
+        .unwrap();
+        let partial = Settings::load(&path, dir.path());
+        assert!(partial.ocr.enabled);
+        assert_eq!(partial.ocr.engine, OcrChoice::Auto);
+        assert_eq!(partial.ocr.tesseract_path, None);
+    }
+
+    #[test]
+    fn auto_ocr_language_follows_the_interface_language() {
+        let mut s = Settings::defaults(Path::new("/x"));
+        assert_eq!(effective_ocr_language(&s), OcrLanguage::Auto);
+        s.language = Language::Tr;
+        assert_eq!(effective_ocr_language(&s), OcrLanguage::Tr);
+        s.ocr.language = OcrLanguage::En;
+        assert_eq!(effective_ocr_language(&s), OcrLanguage::En);
     }
 }
