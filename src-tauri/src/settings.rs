@@ -39,6 +39,8 @@ pub struct Settings {
     pub workers: usize,
     pub language: Language,
     pub ocr: OcrSettings,
+    /// The first-run card was answered; missing in old files, so they see it once.
+    pub onboarded: bool,
 }
 
 /// Folder name created under the base folder for converted files.
@@ -79,6 +81,7 @@ impl Settings {
             workers: default_workers(),
             language: Language::Auto,
             ocr: OcrSettings::default(),
+            onboarded: false,
         }
     }
 
@@ -256,5 +259,21 @@ mod tests {
         let s = Settings::load(&path, dir.path());
         assert_eq!(s.language, Language::Auto);
         assert_eq!(s.workers, 3);
+    }
+
+    #[test]
+    fn onboarded_defaults_to_false_round_trips_and_old_files_are_not_onboarded() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!Settings::defaults(dir.path()).onboarded);
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, r#"{"outputDir": "/x", "workers": 2}"#).unwrap();
+        assert!(!Settings::load(&path, dir.path()).onboarded);
+        let mut s = Settings::defaults(dir.path());
+        s.onboarded = true;
+        s.save(&path).unwrap();
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains(r#""onboarded": true"#));
+        assert!(Settings::load(&path, dir.path()).onboarded);
     }
 }
