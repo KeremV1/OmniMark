@@ -44,7 +44,7 @@ const FALLBACK_SETTINGS: Settings = {
   extractImages: true,
   workers: 2,
   language: 'auto',
-  ocr: { enabled: false, engine: 'auto', language: 'auto', tesseractPath: null },
+  ocr: { enabled: false },
 };
 
 let view: View = {

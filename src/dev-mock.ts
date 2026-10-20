@@ -54,7 +54,7 @@ let settings: Settings = {
   extractImages: true,
   workers: 2,
   language: forcedLang === 'en' || forcedLang === 'tr' ? forcedLang : 'auto',
-  ocr: { enabled: false, engine: 'auto', language: 'auto', tesseractPath: null },
+  ocr: { enabled: false },
 };
 let cancelDownload = false;
 let cancelRun: (() => void) | null = null;
@@ -127,14 +127,10 @@ async function fakeDownload(channel: Channel<DownloadEvent>): Promise<void> {
 }
 
 const OCR_STATUS: OcrStatus = {
-  windowsBuilt: true,
-  windowsLanguages: ['tr'],
-  tesseractPath: null,
-  tesseractLanguages: [],
-  ocrsBuilt: true,
-  ocrsModels: false,
+  engine: 'ocrs',
+  ready: false,
+  needsDownload: true,
   ocrsDownloadBytes: 12_212_656,
-  selected: 'windows',
   downloading: false,
 };
 
@@ -176,12 +172,8 @@ export function installDevMock(): void {
             ],
             headingsTruncated: true,
           };
-        case 'ocr_status': {
-          const draft = args.draft as Settings['ocr'] | null;
-          const engine = draft?.engine ?? settings.ocr.engine;
-          const selected = engine === 'tesseract' ? null : engine === 'ocrs' ? (OCR_STATUS.ocrsModels ? 'ocrs' : null) : OCR_STATUS.selected;
-          return { ...OCR_STATUS, selected };
-        }
+        case 'ocr_status':
+          return OCR_STATUS;
         case 'download_ocr_models':
           return fakeDownload(args.onEvent as Channel<DownloadEvent>);
         case 'cancel_download':
