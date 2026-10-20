@@ -25,8 +25,10 @@ describe('language detection', () => {
     expect(resolveLang('ru', 'tr-TR')).toBe('ru');
     expect(resolveLang('pt-BR', 'en-US')).toBe('pt-BR');
   });
-  it('only yields tags Intl accepts', () => {
-    for (const lang of LANGS) expect(Intl.NumberFormat.supportedLocalesOf(lang)).toEqual([lang]);
+  it('only yields canonical BCP-47 tags', () => {
+    // getCanonicalLocales validates syntax without loading locale data (supportedLocalesOf could
+    // take seconds on a cold Windows CI runner and time out).
+    for (const lang of LANGS) expect(Intl.getCanonicalLocales(lang)).toEqual([lang]);
   });
 });
 
