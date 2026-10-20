@@ -209,7 +209,7 @@ fn extract_round(
                 result.warn(no_text_layer_warning(i + 1));
             }
         } else if ocr_on {
-            images = page_images(&page, round_bytes.saturating_sub(pending), result);
+            images = page_images(&page, round_bytes, result);
         }
         pending += images.iter().map(|(_, im)| im.rgba().len()).sum::<usize>()
             + scan.as_ref().map_or(0, |im| im.rgba().len());
