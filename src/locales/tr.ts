@@ -62,7 +62,7 @@ const tr: Messages = {
   'action.showFile': 'Dosyayı göster',
   'action.removeFromList': 'Listeden kaldır',
   'dialog.allFiles': 'Tüm dosyalar',
-  'drop.formats': 'PDF, Word, Excel, PowerPoint, HTML, CSV, metin ve JSON dosyaları Markdown’a çevrilir.',
+  'drop.formats': 'PDF, Word, Excel, PowerPoint, HTML, CSV, metin, JSON, görsel ve ZIP dosyaları Markdown’a çevrilir.',
   'drop.orAdd': 'ya da',
   'output.short': 'Çıktı',
   'list.label': 'Dönüştürülecek dosyalar',
@@ -114,6 +114,13 @@ const tr: Messages = {
   'kind.unknown': 'Bilinmiyor',
   'firstRun.text': 'Markdown dosyaları şuraya kaydedilecek:',
   'action.ok': 'Tamam',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} dosya dönüştürüldü, {m} atlandı',
+  'zip.summaryAll': '{n} dosya dönüştürüldü',
+  'settings.zipOutput': 'ZIP dosyaları',
+  'settings.zipFolder': 'Aynı yapıda bir klasör',
+  'settings.zipSingle': 'Tek birleşik Markdown dosyası',
+  'settings.zipZip': 'Markdown dosyalarının ZIP\'i',
 };
 
 export default tr;

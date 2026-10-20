@@ -62,7 +62,7 @@ const es: Messages = {
   'action.showFile': 'Mostrar archivo',
   'action.removeFromList': 'Quitar de la lista',
   'dialog.allFiles': 'Todos los archivos',
-  'drop.formats': 'Los archivos PDF, Word, Excel, PowerPoint, HTML, CSV, de texto y JSON se convierten en Markdown.',
+  'drop.formats': 'Los archivos PDF, Word, Excel, PowerPoint, HTML, CSV, de texto, JSON, imágenes y ZIP se convierten en Markdown.',
   'drop.orAdd': 'o',
   'output.short': 'Salida',
   'list.label': 'Archivos por convertir',
@@ -114,6 +114,13 @@ const es: Messages = {
   'kind.unknown': 'Desconocido',
   'firstRun.text': 'Los archivos Markdown se guardarán en:',
   'action.ok': 'Aceptar',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} archivos convertidos, {m} omitidos',
+  'zip.summaryAll': '{n} archivos convertidos',
+  'settings.zipOutput': 'Archivos ZIP',
+  'settings.zipFolder': 'Una carpeta con la misma estructura',
+  'settings.zipSingle': 'Un solo archivo Markdown combinado',
+  'settings.zipZip': 'Un ZIP con los archivos Markdown',
 };
 
 export default es;

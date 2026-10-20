@@ -1,3 +1,17 @@
 [
-  { "file": "random.bin", "expect_error": "unsupported", "note": "Binary noise with an unknown extension." }
+  { "file": "random.bin", "expect_error": "unsupported", "note": "Binary noise with an unknown extension." },
+  {
+    "file": "test_files.zip",
+    "include": [
+      "Content from the zip file `test_files.zip`:",
+      "## File: test.docx",
+      "## File: test.xlsx",
+      "## File: test.pptx",
+      "## File: test_blog.html",
+      "## File: test.jpg",
+      "ImageSize: 1615x1967"
+    ],
+    "exclude": ["[Content_Types].xml", "word/document.xml"],
+    "note": "MarkItDown's combined ZIP output; the Office members are converted, not unpacked."
+  }
 ]

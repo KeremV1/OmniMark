@@ -25,6 +25,7 @@ pub fn mime_for_extension(ext: &str) -> Option<&'static str> {
         "xls" => "application/vnd.ms-excel",
         "ods" => "application/vnd.oasis.opendocument.spreadsheet",
         "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "zip" => "application/zip",
         "html" | "htm" => "text/html",
         "csv" => "text/csv",
         "txt" | "text" => "text/plain",
@@ -133,6 +134,7 @@ pub enum FileKind {
     Text,
     Json,
     Image,
+    Zip,
     Audio,
     Unknown,
 }
@@ -155,6 +157,7 @@ fn kind_of(info: &FileInfo) -> FileKind {
         Some("csv") => FileKind::Csv,
         Some("json" | "jsonl") => FileKind::Json,
         Some("txt" | "text" | "md" | "markdown") => FileKind::Text,
+        Some("zip") => FileKind::Zip,
         _ => FileKind::Unknown,
     };
     if by_extension != FileKind::Unknown {

@@ -62,7 +62,7 @@ const ru: Messages = {
   'action.showFile': 'Показать файл',
   'action.removeFromList': 'Убрать из списка',
   'dialog.allFiles': 'Все файлы',
-  'drop.formats': 'Файлы PDF, Word, Excel, PowerPoint, HTML, CSV, текстовые и JSON преобразуются в Markdown.',
+  'drop.formats': 'Файлы PDF, Word, Excel, PowerPoint, HTML, CSV, текстовые, JSON, изображения и ZIP преобразуются в Markdown.',
   'drop.orAdd': 'или',
   'output.short': 'Результат',
   'list.label': 'Файлы для преобразования',
@@ -114,6 +114,13 @@ const ru: Messages = {
   'kind.unknown': 'Неизвестно',
   'firstRun.text': 'Файлы Markdown будут сохранены в:',
   'action.ok': 'ОК',
+  'kind.zip': 'ZIP',
+  'zip.summary': 'Преобразовано файлов: {n}, пропущено: {m}',
+  'zip.summaryAll': 'Преобразовано файлов: {n}',
+  'settings.zipOutput': 'ZIP-файлы',
+  'settings.zipFolder': 'Папка с той же структурой',
+  'settings.zipSingle': 'Один общий файл Markdown',
+  'settings.zipZip': 'ZIP с файлами Markdown',
 };
 
 export default ru;

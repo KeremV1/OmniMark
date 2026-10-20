@@ -9,8 +9,9 @@ import {
   type OcrStatus,
   type Settings,
   type SettingsLanguage,
+  type ZipOutput,
 } from '../api';
-import { getLang, LANGS, LANGUAGE_NAMES, type Lang, t } from '../i18n';
+import { getLang, LANGS, LANGUAGE_NAMES, type Lang, type MessageKey, t } from '../i18n';
 import { h, icons, setText, svg } from './dom';
 
 export interface SettingsDialogOptions {
@@ -24,6 +25,13 @@ export interface SettingsDialogOptions {
 const AUTHOR_URL = 'https://github.com/KeremV1';
 const MIN_WORKERS = 1;
 const MAX_WORKERS = 8;
+
+/** The ZIP output choices with their labels, in display order. */
+export const ZIP_OUTPUTS: ReadonlyArray<readonly [ZipOutput, MessageKey]> = [
+  ['folder', 'settings.zipFolder'],
+  ['single', 'settings.zipSingle'],
+  ['zip', 'settings.zipZip'],
+];
 
 /** Shows `text` in the dialog's error line, or hides the line for `null`. */
 export function setDialogError(line: Pick<HTMLElement, 'textContent' | 'hidden'>, text: string | null): void {
@@ -89,6 +97,13 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     ...LANGS.map((code) => h('option', { value: code, lang: code }, LANGUAGE_NAMES[code])),
   ) as HTMLSelectElement;
   language.value = draft.language;
+
+  const zipOutput = h(
+    'select',
+    { id: 'set-zip' },
+    ...ZIP_OUTPUTS.map(([value, key]) => h('option', { value }, t(key))),
+  ) as HTMLSelectElement;
+  zipOutput.value = draft.zipOutput;
 
   // ---- OCR section ----
   const ocrEnabled = h('input', { type: 'checkbox', id: 'set-ocr' }) as HTMLInputElement;
@@ -222,6 +237,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
       workers,
     ),
     h('div', { class: 'field field-inline' }, h('label', { for: 'set-lang' }, t('settings.language')), language),
+    h('div', { class: 'field field-inline' }, h('label', { for: 'set-zip' }, t('settings.zipOutput')), zipOutput),
     ocrSection,
     h('div', { class: 'field' }, logs),
     about,
@@ -243,6 +259,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     draft.workers = Number.isFinite(n) ? Math.min(MAX_WORKERS, Math.max(MIN_WORKERS, n)) : settings.workers;
     draft.extractImages = images.checked;
     draft.language = language.value as SettingsLanguage;
+    draft.zipOutput = zipOutput.value as ZipOutput;
     draft.ocr = { enabled: ocrEnabled.checked };
     save.disabled = true;
     setDialogError(errorLine, null);

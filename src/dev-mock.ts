@@ -21,6 +21,7 @@ const SAMPLES: FileEntry[] = [
   { path: `${DIR}\\Bütçe 2027.xlsx`, name: 'Bütçe 2027.xlsx', kind: 'excel', size: 184_320, supported: true },
   { path: `${DIR}\\ofis-fotoğrafı.jpg`, name: 'ofis-fotoğrafı.jpg', kind: 'image', size: 1_258_291, supported: true },
   { path: `${DIR}\\Sözleşme taslağı.docx`, name: 'Sözleşme taslağı.docx', kind: 'word', size: 56_320, supported: true },
+  { path: `${DIR}\\Proje dosyaları.zip`, name: 'Proje dosyaları.zip', kind: 'zip', size: 4_194_304, supported: true },
 ];
 
 const SAMPLE_MARKDOWN = `# Yıllık rapor 2026
@@ -57,6 +58,7 @@ let settings: Settings = {
   language: forcedLang && isLang(forcedLang) ? forcedLang : 'auto',
   ocr: { enabled: false },
   onboarded: new URLSearchParams(location.search).get('scenario') !== 'firstrun',
+  zipOutput: 'folder',
 };
 let cancelDownload = false;
 let cancelRun: (() => void) | null = null;
@@ -108,6 +110,13 @@ async function fakeConvert(files: string[], channel: Channel<ConvertEvent>): Pro
         send({ event: 'progress', data: { path, fraction: f } });
       }
       ok++;
+      if (path.endsWith('.zip')) {
+        const base = (path.split('\\').pop() ?? path).replace(/\.zip$/i, '');
+        const mode = settings.zipOutput;
+        const output = mode === 'single' ? outputOf(path) : mode === 'zip' ? `${OUT}\\${base}-md.zip` : `${OUT}\\${base}`;
+        send({ event: 'fileFinished', data: { path, output, warnings: [], zip: { mode, converted: 12, skipped: 2 } } });
+        return;
+      }
       send({ event: 'fileFinished', data: { path, output: outputOf(path), warnings: path.endsWith('.pdf') ? ['Page 4: an image could not be extracted.'] : [] } });
     }),
   );

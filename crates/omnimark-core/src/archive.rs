@@ -64,7 +64,50 @@ impl<'a> Archive<'a> {
         let Some(index) = self.zip.index_for_name(name) else {
             return Ok(None);
         };
+        self.read_index(index).map(Some)
+    }
+
+    /// Number of entries (folders included).
+    pub fn len(&self) -> usize {
+        self.zip.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.zip.len() == 0
+    }
+
+    /// Bytes one entry may decompress to.
+    pub fn entry_limit(&self) -> u64 {
+        self.entry_limit
+    }
+
+    /// Bytes that may still be decompressed from this archive.
+    pub fn budget_left(&self) -> u64 {
+        self.budget
+    }
+
+    /// Metadata of entry `index` without decompressing it.
+    pub fn entry_info(&mut self, index: usize) -> Result<EntryInfo> {
+        let file = self
+            .zip
+            .by_index_raw(index)
+            .map_err(ConvertError::corrupt)?;
+        Ok(EntryInfo {
+            name: file.name().map_err(ConvertError::corrupt)?.into_owned(),
+            is_dir: file.is_dir(),
+            encrypted: file.encrypted(),
+            size: file.size(),
+        })
+    }
+
+    /// Decompresses entry `index` (duplicate names stay distinguishable this way) within the
+    /// per-entry limit and the remaining budget; a failed read does not use up budget.
+    pub fn read_index(&mut self, index: usize) -> Result<Vec<u8>> {
         let mut file = self.zip.by_index(index).map_err(ConvertError::corrupt)?;
+        let name = file
+            .name()
+            .map(|n| n.into_owned())
+            .unwrap_or_else(|_| format!("#{index}"));
         let too_big = |limit: u64, budget: u64| {
             ConvertError::Corrupt(if limit < budget {
                 format!("archive entry {name} expands beyond the per-entry limit")
@@ -83,8 +126,18 @@ impl<'a> Archive<'a> {
             return Err(too_big(limit, self.budget));
         }
         self.budget -= buf.len() as u64;
-        Ok(Some(buf))
+        Ok(buf)
     }
+}
+
+/// What the central directory says about one entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntryInfo {
+    pub name: String,
+    pub is_dir: bool,
+    pub encrypted: bool,
+    /// Declared uncompressed size (not trusted).
+    pub size: u64,
 }
 
 #[cfg(test)]

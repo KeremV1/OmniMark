@@ -61,7 +61,7 @@ export const en = {
   'action.showFile': 'Show file',
   'action.removeFromList': 'Remove from list',
   'dialog.allFiles': 'All files',
-  'drop.formats': 'PDF, Word, Excel, PowerPoint, HTML, CSV, text and JSON files become Markdown.',
+  'drop.formats': 'PDF, Word, Excel, PowerPoint, HTML, CSV, text, JSON, image and ZIP files become Markdown.',
   'drop.orAdd': 'or',
   'output.short': 'Output',
   'list.label': 'Files to convert',
@@ -113,6 +113,13 @@ export const en = {
   'kind.unknown': 'Unknown',
   'firstRun.text': 'Markdown files will be saved to:',
   'action.ok': 'OK',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} files converted, {m} skipped',
+  'zip.summaryAll': '{n} files converted',
+  'settings.zipOutput': 'ZIP files',
+  'settings.zipFolder': 'A folder with the same structure',
+  'settings.zipSingle': 'One combined Markdown file',
+  'settings.zipZip': 'A ZIP of the Markdown files',
 } as const;
 
 export type MessageKey = keyof typeof en;

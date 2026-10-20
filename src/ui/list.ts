@@ -1,6 +1,6 @@
-import { getLang, type MessageKey, t, warningsLabel } from '../i18n';
+import { getLang, type MessageKey, t, warningsLabel, zipSummaryLabel } from '../i18n';
 import { formatBytes } from '../platform';
-import { type QueueItem, selectionState, visibleItems } from '../queue';
+import { previewable, type QueueItem, selectionState, visibleItems } from '../queue';
 import type { Actions, View } from './context';
 import { h, icons, setText, svg, toggleAttr } from './dom';
 
@@ -107,8 +107,10 @@ export function createList(actions: Actions): List {
     const primary = h('button', { class: 'btn-link', type: 'button' }) as HTMLButtonElement;
     primary.addEventListener('click', () => {
       const it = itemOf(item.path);
-      if (it?.status === 'done') actions.openPreview(it.path);
-      else if (it?.status === 'failed') actions.showDetails(it.path);
+      if (it?.status === 'done') {
+        if (previewable(it)) actions.openPreview(it.path);
+        else if (it.output) actions.reveal(it.output);
+      } else if (it?.status === 'failed') actions.showDetails(it.path);
     });
     const more = h(
       'button',
@@ -159,7 +161,8 @@ export function createList(actions: Actions): List {
     setText(row.size, formatBytes(item.size, getLang()));
     renderStatus(row, item);
 
-    const primaryKey = item.status === 'done' ? 'action.preview' : item.status === 'failed' ? 'action.details' : null;
+    const doneKey = previewable(item) ? 'action.preview' : 'action.reveal';
+    const primaryKey = item.status === 'done' ? doneKey : item.status === 'failed' ? 'action.details' : null;
     row.primary.hidden = primaryKey === null;
     if (primaryKey) setText(row.primary, t(primaryKey));
   }
@@ -195,7 +198,7 @@ export function createList(actions: Actions): List {
       return;
     }
     row.bar = undefined;
-    const key = `${item.status}|${item.error?.kind ?? ''}|${item.warnings.length}|${getLang()}`;
+    const key = `${item.status}|${item.error?.kind ?? ''}|${item.warnings.length}|${item.zip?.converted ?? ''}/${item.zip?.skipped ?? ''}|${getLang()}`;
     if (key === row.statusKey) return;
     row.statusKey = key;
     switch (item.status) {
@@ -210,6 +213,9 @@ export function createList(actions: Actions): List {
         break;
       case 'done':
         row.status.replaceChildren(h('span', { class: 'state state-done' }, svg(icons.check, 'state-icon'), t('status.done')));
+        if (item.zip) {
+          row.status.append(h('span', { class: 'muted' }, zipSummaryLabel(item.zip.converted, item.zip.skipped)));
+        }
         if (item.warnings.length > 0) {
           row.status.append(h('span', { class: 'warn-count' }, warningsLabel(item.warnings.length)));
         }

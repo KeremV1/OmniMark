@@ -31,3 +31,4 @@ windows-core = "0.62"
 
 [dev-dependencies]
 tempfile.workspace = true
+zip.workspace = true

@@ -104,3 +104,8 @@ export function t(key: MessageKey, vars?: Record<string, string | number>): stri
 export function warningsLabel(n: number): string {
   return n === 1 ? t('status.warning1') : t('status.warnings', { n });
 }
+
+/** "12 files converted, 2 skipped"; without skipped files just the first part. */
+export function zipSummaryLabel(converted: number, skipped: number): string {
+  return skipped > 0 ? t('zip.summary', { n: converted, m: skipped }) : t('zip.summaryAll', { n: converted });
+}

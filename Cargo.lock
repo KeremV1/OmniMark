@@ -2934,6 +2934,7 @@ dependencies = [
  "walkdir",
  "webview2-com",
  "windows-core",
+ "zip 9.0.5",
 ]
 
 [[package]]
@@ -2943,6 +2944,7 @@ dependencies = [
  "clap",
  "omnimark-core",
  "tempfile",
+ "zip 9.0.5",
 ]
 
 [[package]]

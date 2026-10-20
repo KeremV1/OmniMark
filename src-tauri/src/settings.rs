@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use omnimark_core::ocr::EngineConfig;
+use omnimark_core::zip_output::ZipOutput;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +42,8 @@ pub struct Settings {
     pub ocr: OcrSettings,
     /// The first-run card was answered; missing in old files, so they see it once.
     pub onboarded: bool,
+    /// What a converted `.zip` becomes: a folder tree (default), one combined file or a zip.
+    pub zip_output: ZipOutput,
 }
 
 /// Folder name created under the base folder for converted files.
@@ -82,6 +85,7 @@ impl Settings {
             language: Language::Auto,
             ocr: OcrSettings::default(),
             onboarded: false,
+            zip_output: ZipOutput::default(),
         }
     }
 
@@ -275,5 +279,29 @@ mod tests {
             .unwrap()
             .contains(r#""onboarded": true"#));
         assert!(Settings::load(&path, dir.path()).onboarded);
+    }
+
+    #[test]
+    fn zip_output_defaults_to_folder_for_old_files_and_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, r#"{"outputDir": "/x", "workers": 2}"#).unwrap();
+        assert_eq!(
+            Settings::load(&path, dir.path()).zip_output,
+            ZipOutput::Folder
+        );
+        for mode in [ZipOutput::Single, ZipOutput::Zip, ZipOutput::Folder] {
+            let mut s = Settings::defaults(dir.path());
+            s.zip_output = mode;
+            s.save(&path).unwrap();
+            assert_eq!(Settings::load(&path, dir.path()).zip_output, mode);
+        }
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains(r#""zipOutput": "folder""#));
+        // An unknown value keeps the other fields and falls back to the folder mode.
+        std::fs::write(&path, r#"{"workers": 3, "zipOutput": "tarball"}"#).unwrap();
+        let s = Settings::load(&path, dir.path());
+        assert_eq!(s.zip_output, ZipOutput::Folder);
+        assert_eq!(s.workers, 3);
     }
 }

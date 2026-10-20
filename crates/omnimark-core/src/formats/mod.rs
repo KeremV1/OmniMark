@@ -9,8 +9,10 @@ pub mod pdf;
 pub mod pptx;
 pub mod text;
 pub mod xlsx;
+pub mod zip;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::registry::Registry;
 
@@ -22,7 +24,8 @@ pub struct RegistryConfig {
     pub pdfium_library: Option<PathBuf>,
 }
 
-pub fn default_registry(config: &RegistryConfig) -> Registry {
+/// Every converter except ZIP: what the entries of an archive are converted with.
+fn base_registry(config: &RegistryConfig) -> Registry {
     let mut registry = Registry::new();
     registry.register(pdf::PdfConverter::new(config.pdfium_library.clone()));
     registry.register(docx::DocxConverter);
@@ -32,6 +35,13 @@ pub fn default_registry(config: &RegistryConfig) -> Registry {
     registry.register(csv::CsvConverter);
     registry.register(html::HtmlConverter);
     registry.register(text::TextConverter);
+    registry
+}
+
+pub fn default_registry(config: &RegistryConfig) -> Registry {
+    let mut registry = base_registry(config);
+    // Plain `.zip` comes last: OOXML files and other specific formats win.
+    registry.register(zip::ZipConverter::new(Arc::new(base_registry(config))));
     registry
 }
 
@@ -45,7 +55,8 @@ mod tests {
         let registry = default_registry(&RegistryConfig::default());
         for ext in [
             "pdf", "docx", "xlsx", "xlsm", "xls", "ods", "pptx", "html", "htm", "csv", "txt", "md",
-            "markdown", "json", "jsonl", "jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff",
+            "markdown", "json", "jsonl", "zip", "jpg", "jpeg", "png", "webp", "gif", "bmp", "tif",
+            "tiff",
         ] {
             assert!(
                 registry.accepts_any(Path::new(&format!("f.{ext}")), b""),

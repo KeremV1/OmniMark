@@ -93,6 +93,7 @@ pub async fn convert(
             options,
             workers: settings.workers,
             ocr_warning,
+            zip_output: settings.zip_output,
         };
         run_batch(&registry, &request, &cancel, &|event| {
             let _ = on_event.send(event);

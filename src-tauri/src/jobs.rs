@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 use omnimark_core::assets::{AssetSink, DirAssetSink, NullAssetSink};
 use omnimark_core::output::{write_atomic, OutputAllocator};
+use omnimark_core::zip_output::{write_zip_file, ZipOutput, ZipWritten};
 use omnimark_core::{
     convert_isolated, CancelToken, ConvertContext, ConvertError, ConvertOptions, ErrorKind,
     Registry,
@@ -34,6 +35,8 @@ pub enum ConvertEvent {
         path: String,
         output: String,
         warnings: Vec<String>,
+        /// Set for a `.zip`: how it was written and how many files were converted or skipped.
+        zip: Option<ZipInfo>,
     },
     FileFailed {
         path: String,
@@ -50,6 +53,14 @@ pub enum ConvertEvent {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZipInfo {
+    pub mode: ZipOutput,
+    pub converted: usize,
+    pub skipped: usize,
+}
+
 pub struct BatchRequest {
     pub files: Vec<PathBuf>,
     pub output_dir: PathBuf,
@@ -57,6 +68,7 @@ pub struct BatchRequest {
     pub workers: usize,
     /// Added to the warnings of every finished file (for example "OCR was skipped").
     pub ocr_warning: Option<String>,
+    pub zip_output: ZipOutput,
 }
 
 enum Outcome {
@@ -126,15 +138,6 @@ fn convert_one(
     emit(ConvertEvent::FileStarted {
         path: shown.clone(),
     });
-    let target = allocator.allocate(path);
-
-    let mut dir_sink = DirAssetSink::new(target.assets_dir.clone());
-    let mut null_sink = NullAssetSink;
-    let sink: &mut dyn AssetSink = if options.extract_images {
-        &mut dir_sink
-    } else {
-        &mut null_sink
-    };
 
     let last_reported = Mutex::new(0.0f32);
     let progress = |fraction: f32| {
@@ -149,6 +152,33 @@ fn convert_one(
             });
         }
     };
+
+    if is_zip_name(path) {
+        match write_zip_file(
+            request.zip_output,
+            registry,
+            path,
+            allocator,
+            options,
+            cancel,
+            &progress,
+        ) {
+            Ok(Some(written)) => return finish_zip(shown, written, request, emit),
+            Ok(None) => {} // an Office file with a .zip name: the normal converters take it
+            Err(error) => return report_error(shown, error, emit),
+        }
+    }
+
+    let target = allocator.allocate(path);
+
+    let mut dir_sink = DirAssetSink::new(target.assets_dir.clone());
+    let mut null_sink = NullAssetSink;
+    let sink: &mut dyn AssetSink = if options.extract_images {
+        &mut dir_sink
+    } else {
+        &mut null_sink
+    };
+
     let mut ctx = ConvertContext {
         options,
         assets: sink,
@@ -170,23 +200,60 @@ fn convert_one(
                     .into_iter()
                     .chain(request.ocr_warning.clone())
                     .collect(),
+                zip: None,
             });
             Outcome::Ok
         }
         Err(error) => {
             let _ = dir_sink.remove();
-            if matches!(error, ConvertError::Cancelled) {
-                emit(ConvertEvent::FileCancelled { path: shown });
-                Outcome::Cancelled
-            } else {
-                emit(ConvertEvent::FileFailed {
-                    path: shown,
-                    kind: error.kind(),
-                    message: error.to_string(),
-                });
-                Outcome::Failed
-            }
+            report_error(shown, error, emit)
         }
+    }
+}
+
+fn is_zip_name(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+}
+
+fn finish_zip(
+    shown: String,
+    written: ZipWritten,
+    request: &BatchRequest,
+    emit: &(dyn Fn(ConvertEvent) + Sync),
+) -> Outcome {
+    emit(ConvertEvent::FileFinished {
+        path: shown,
+        output: written.output.display().to_string(),
+        warnings: written
+            .warnings
+            .into_iter()
+            .chain(request.ocr_warning.clone())
+            .collect(),
+        zip: Some(ZipInfo {
+            mode: request.zip_output,
+            converted: written.converted,
+            skipped: written.skipped,
+        }),
+    });
+    Outcome::Ok
+}
+
+fn report_error(
+    shown: String,
+    error: ConvertError,
+    emit: &(dyn Fn(ConvertEvent) + Sync),
+) -> Outcome {
+    if matches!(error, ConvertError::Cancelled) {
+        emit(ConvertEvent::FileCancelled { path: shown });
+        Outcome::Cancelled
+    } else {
+        emit(ConvertEvent::FileFailed {
+            path: shown,
+            kind: error.kind(),
+            message: error.to_string(),
+        });
+        Outcome::Failed
     }
 }
 #[cfg(test)]
@@ -221,6 +288,7 @@ mod tests {
             options: ConvertOptions::default(),
             workers: 2,
             ocr_warning: None,
+            zip_output: ZipOutput::default(),
         };
         let registry = default_registry(&RegistryConfig::default());
         let events = collect(&registry, &request, &CancelToken::new());
@@ -256,6 +324,7 @@ mod tests {
             options: ConvertOptions::default(),
             workers: 1,
             ocr_warning: None,
+            zip_output: ZipOutput::default(),
         };
         let events = collect(
             &default_registry(&RegistryConfig::default()),
@@ -285,6 +354,7 @@ mod tests {
             options: ConvertOptions::default(),
             workers: 1,
             ocr_warning: Some("OCR was skipped: none.".into()),
+            zip_output: ZipOutput::default(),
         };
         let events = collect(
             &default_registry(&RegistryConfig::default()),
@@ -292,5 +362,107 @@ mod tests {
             &CancelToken::new(),
         );
         assert!(events.iter().any(|e| matches!(e, ConvertEvent::FileFinished { warnings, .. } if warnings == &vec!["OCR was skipped: none.".to_string()])));
+    }
+
+    fn write_zip(path: &std::path::Path) {
+        use std::io::Write;
+        let mut writer = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
+        for (name, data) in [
+            ("a.txt", &b"alpha"[..]),
+            ("dir/b.txt", b"beta"),
+            ("c.bin", &[0u8, 1]),
+        ] {
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(data).unwrap();
+        }
+        writer.finish().unwrap();
+    }
+
+    #[test]
+    fn a_zip_is_one_row_with_counts_in_every_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("pack.zip");
+        write_zip(&archive);
+        let registry = default_registry(&RegistryConfig::default());
+        for (mode, expected) in [
+            (ZipOutput::Folder, "out/pack"),
+            (ZipOutput::Single, "out/pack.md"),
+            (ZipOutput::Zip, "out/pack-md.zip"),
+        ] {
+            let out = dir.path().join(format!("{mode:?}")).join("out");
+            let request = BatchRequest {
+                files: vec![archive.clone()],
+                output_dir: out.clone(),
+                options: ConvertOptions::default(),
+                workers: 1,
+                ocr_warning: None,
+                zip_output: mode,
+            };
+            let events = collect(&registry, &request, &CancelToken::new());
+            let finished: Vec<_> = events
+                .iter()
+                .filter_map(|e| match e {
+                    ConvertEvent::FileFinished { output, zip, .. } => Some((output, zip)),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(finished.len(), 1, "{mode:?}");
+            let (output, zip) = finished[0];
+            assert!(
+                std::path::Path::new(output).ends_with(expected.trim_start_matches("out/")),
+                "{mode:?}: {output}"
+            );
+            assert!(std::path::Path::new(output).exists());
+            assert_eq!(
+                zip,
+                &Some(ZipInfo {
+                    mode,
+                    converted: 2,
+                    skipped: 1
+                })
+            );
+            assert_eq!(
+                events.last(),
+                Some(&ConvertEvent::Finished {
+                    ok: 1,
+                    failed: 0,
+                    cancelled: 0
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn a_zip_without_supported_files_fails_as_one_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("junk.zip");
+        let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+        writer
+            .start_file("c.bin", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut writer, &[0u8, 1]).unwrap();
+        writer.finish().unwrap();
+        let request = BatchRequest {
+            files: vec![archive],
+            output_dir: dir.path().join("out"),
+            options: ConvertOptions::default(),
+            workers: 1,
+            ocr_warning: None,
+            zip_output: ZipOutput::Folder,
+        };
+        let events = collect(
+            &default_registry(&RegistryConfig::default()),
+            &request,
+            &CancelToken::new(),
+        );
+        assert!(events.iter().any(|e| matches!(
+            e,
+            ConvertEvent::FileFailed {
+                kind: ErrorKind::Unsupported,
+                ..
+            }
+        )));
     }
 }

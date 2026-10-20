@@ -1,4 +1,4 @@
-import type { AppError, ConvertEvent, FileEntry, FileKind } from './api';
+import type { AppError, ConvertEvent, FileEntry, FileKind, ZipInfo } from './api';
 
 export type Status = 'pending' | 'converting' | 'done' | 'failed' | 'cancelled' | 'unsupported';
 export type Filter = 'all' | 'done' | 'failed' | 'pending';
@@ -12,6 +12,8 @@ export interface QueueItem {
   selected: boolean;
   progress: number;
   output?: string;
+  /** A finished `.zip`: `output` is then the combined file, a folder or a zip (see `zip.mode`). */
+  zip?: ZipInfo;
   warnings: string[];
   error?: AppError;
 }
@@ -87,7 +89,7 @@ export function beginBatch(state: QueueState, paths: string[]): QueueState {
   const batch = new Set(paths);
   const next = mapItems(state, (i) =>
     batch.has(i.path) && i.status !== 'unsupported'
-      ? { ...i, status: 'pending', progress: 0, output: undefined, warnings: [], error: undefined }
+      ? { ...i, status: 'pending', progress: 0, output: undefined, zip: undefined, warnings: [], error: undefined }
       : i,
   );
   return { ...next, running: true };
@@ -129,6 +131,7 @@ export function applyEvent(state: QueueState, event: ConvertEvent): QueueState {
         status: 'done',
         progress: 1,
         output: event.data.output,
+        zip: event.data.zip ?? undefined,
         warnings: event.data.warnings,
         error: undefined,
       });
@@ -142,6 +145,11 @@ export function applyEvent(state: QueueState, event: ConvertEvent): QueueState {
     case 'finished':
       return { ...state, running: false };
   }
+}
+
+/** A finished item whose output is one Markdown file (everything except a folder or zip result). */
+export function previewable(item: QueueItem): boolean {
+  return item.status === 'done' && !!item.output && (!item.zip || item.zip.mode === 'single');
 }
 
 export function counts(state: QueueState): { all: number; done: number; failed: number; pending: number } {

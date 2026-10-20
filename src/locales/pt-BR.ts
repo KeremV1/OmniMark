@@ -62,7 +62,7 @@ const ptBR: Messages = {
   'action.showFile': 'Mostrar arquivo',
   'action.removeFromList': 'Remover da lista',
   'dialog.allFiles': 'Todos os arquivos',
-  'drop.formats': 'Arquivos PDF, Word, Excel, PowerPoint, HTML, CSV, de texto e JSON viram Markdown.',
+  'drop.formats': 'Arquivos PDF, Word, Excel, PowerPoint, HTML, CSV, de texto, JSON, imagens e ZIP viram Markdown.',
   'drop.orAdd': 'ou',
   'output.short': 'Saída',
   'list.label': 'Arquivos para converter',
@@ -114,6 +114,13 @@ const ptBR: Messages = {
   'kind.unknown': 'Desconhecido',
   'firstRun.text': 'Os arquivos Markdown serão salvos em:',
   'action.ok': 'OK',
+  'kind.zip': 'ZIP',
+  'zip.summary': '{n} arquivos convertidos, {m} ignorados',
+  'zip.summaryAll': '{n} arquivos convertidos',
+  'settings.zipOutput': 'Arquivos ZIP',
+  'settings.zipFolder': 'Uma pasta com a mesma estrutura',
+  'settings.zipSingle': 'Um único arquivo Markdown combinado',
+  'settings.zipZip': 'Um ZIP com os arquivos Markdown',
 };
 
 export default ptBR;

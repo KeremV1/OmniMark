@@ -161,3 +161,73 @@ fn stdout_mode_prints_warnings_to_stderr() {
         "{stderr}"
     );
 }
+
+fn make_zip(path: &Path) {
+    use std::io::Write;
+    let mut writer = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
+    for (name, data) in [
+        ("a.txt", &b"alpha"[..]),
+        ("dir/b.txt", b"beta"),
+        ("c.bin", &[0u8, 1]),
+    ] {
+        writer
+            .start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(data).unwrap();
+    }
+    writer.finish().unwrap();
+}
+
+#[test]
+fn zip_defaults_to_one_combined_file_and_supports_folder_and_zip_modes() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("pack.zip");
+    make_zip(&input);
+    let run = |extra: &[&str], out: &Path| {
+        let output = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+            .args(["convert", "-o"])
+            .arg(out)
+            .args(extra)
+            .arg(&input)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{extra:?}");
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    };
+
+    let single = dir.path().join("single");
+    let stdout = run(&[], &single);
+    assert!(stdout.contains("2 files converted, 1 skipped"), "{stdout}");
+    assert_eq!(
+        std::fs::read_to_string(single.join("pack.md")).unwrap(),
+        "Content from the zip file `pack.zip`:
+
+## File: a.txt
+
+alpha
+
+## File: dir/b.txt
+
+beta"
+    );
+
+    let folder = dir.path().join("folder");
+    run(&["--zip-output", "folder"], &folder);
+    assert_eq!(
+        std::fs::read_to_string(folder.join("pack/dir/b.md")).unwrap(),
+        "beta"
+    );
+
+    let packed = dir.path().join("packed");
+    run(&["--zip-output=zip"], &packed);
+    assert!(packed.join("pack-md.zip").is_file());
+
+    // --stdout prints the combined text, like MarkItDown.
+    let printed = Command::new(env!("CARGO_BIN_EXE_omnimark"))
+        .args(["convert", "--stdout"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&printed.stdout)
+        .starts_with("Content from the zip file `pack.zip`:"));
+}

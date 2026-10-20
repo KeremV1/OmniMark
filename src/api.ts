@@ -12,6 +12,7 @@ export type FileKind =
   | 'text'
   | 'json'
   | 'image'
+  | 'zip'
   | 'audio'
   | 'unknown';
 
@@ -46,6 +47,9 @@ export interface OcrSettings {
   enabled: boolean;
 }
 
+/** What a converted `.zip` becomes: a folder tree, one combined file or a zip of the folder tree. */
+export type ZipOutput = 'folder' | 'single' | 'zip';
+
 export interface Settings {
   outputDir: string;
   extractImages: boolean;
@@ -54,6 +58,7 @@ export interface Settings {
   ocr: OcrSettings;
   /** The first-run card was answered. */
   onboarded: boolean;
+  zipOutput: ZipOutput;
 }
 
 /** Which OCR engine will run and whether it is ready (`ocr_status`). */
@@ -92,11 +97,18 @@ export interface OutputText {
   headingsTruncated: boolean;
 }
 
+/** Set on a finished `.zip`: how it was written and how many files were converted or skipped. */
+export interface ZipInfo {
+  mode: ZipOutput;
+  converted: number;
+  skipped: number;
+}
+
 export type ConvertEvent =
   | { event: 'started'; data: { total: number } }
   | { event: 'fileStarted'; data: { path: string } }
   | { event: 'progress'; data: { path: string; fraction: number } }
-  | { event: 'fileFinished'; data: { path: string; output: string; warnings: string[] } }
+  | { event: 'fileFinished'; data: { path: string; output: string; warnings: string[]; zip?: ZipInfo | null } }
   | { event: 'fileFailed'; data: { path: string; kind: ErrorKind; message: string } }
   | { event: 'fileCancelled'; data: { path: string } }
   | { event: 'finished'; data: { ok: number; failed: number; cancelled: number } };
@@ -104,7 +116,7 @@ export type ConvertEvent =
 /** Extensions the M1 converters accept. */
 export const SUPPORTED_EXTENSIONS = [
   'pdf', 'docx', 'xlsx', 'xlsm', 'xls', 'ods', 'pptx', 'html', 'htm', 'csv', 'txt', 'md', 'markdown', 'json', 'jsonl',
-  'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff',
+  'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'zip',
 ];
 
 export function inspectFiles(paths: string[]): Promise<{ entries: FileEntry[]; truncated: boolean }> {

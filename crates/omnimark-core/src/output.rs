@@ -76,6 +76,58 @@ impl OutputAllocator {
     }
 }
 
+impl OutputAllocator {
+    /// A unique folder name `<stem>` (then `<stem> (2)`, ...) for the contents of an archive.
+    pub fn allocate_dir(&self, source: &Path) -> PathBuf {
+        self.claim(&Self::stem_of(source), "")
+    }
+
+    /// A unique `<stem>-md.zip` file name for an archive's converted contents.
+    pub fn allocate_zip(&self, source: &Path) -> PathBuf {
+        self.claim(&format!("{}-md", Self::stem_of(source)), ".zip")
+    }
+
+    fn stem_of(source: &Path) -> String {
+        sanitize_stem(
+            &source
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        )
+    }
+
+    /// Reserves `<name><suffix>` (`name` = `base`, `base (2)`, ...) in the output folder.
+    fn claim(&self, base: &str, suffix: &str) -> PathBuf {
+        let mut reserved = self
+            .reserved
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let on_disk: HashSet<String> = std::fs::read_dir(&self.dir)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|e| e.file_name().to_string_lossy().to_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut n = 1u32;
+        loop {
+            let name = if n == 1 {
+                base.to_string()
+            } else {
+                format!("{base} ({n})")
+            };
+            let file_name = format!("{name}{suffix}");
+            let key = file_name.to_lowercase();
+            if !reserved.contains(&key) && !on_disk.contains(&key) {
+                reserved.insert(key);
+                return self.dir.join(file_name);
+            }
+            n += 1;
+        }
+    }
+}
+
 /// Replaces characters that are invalid in file names on Windows, macOS or Linux.
 pub fn sanitize_stem(stem: &str) -> String {
     let cleaned: String = stem
@@ -91,9 +143,26 @@ pub fn sanitize_stem(stem: &str) -> String {
     let trimmed = cleaned.trim_end_matches(['.', ' ']).trim();
     if trimmed.is_empty() {
         "document".to_string()
+    } else if is_reserved_on_windows(trimmed) {
+        format!("_{trimmed}")
     } else {
         trimmed.to_string()
     }
+}
+
+/// `CON`, `NUL`, `COM1`… (also with an extension, any case) name devices on Windows.
+fn is_reserved_on_windows(name: &str) -> bool {
+    let base = name
+        .split('.')
+        .next()
+        .unwrap_or(name)
+        .trim_end()
+        .to_ascii_uppercase();
+    matches!(base.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (base.len() == 4
+            && (base.starts_with("COM") || base.starts_with("LPT"))
+            && base.as_bytes()[3].is_ascii_digit()
+            && base.as_bytes()[3] != b'0')
 }
 
 /// Writes through a hidden temporary file and renames it, so a crash never leaves a half-written `.md`.
@@ -138,10 +207,39 @@ mod tests {
     }
 
     #[test]
+    fn archive_folders_and_zips_get_unique_names_too() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("pack")).unwrap();
+        std::fs::write(tmp.path().join("pack-md.zip"), "old").unwrap();
+        let alloc = OutputAllocator::new(tmp.path());
+        assert_eq!(
+            alloc.allocate_dir(Path::new("in/pack.zip")),
+            tmp.path().join("pack (2)")
+        );
+        assert_eq!(
+            alloc.allocate_dir(Path::new("other/PACK.zip")),
+            tmp.path().join("PACK (3)")
+        );
+        assert_eq!(
+            alloc.allocate_zip(Path::new("in/pack.zip")),
+            tmp.path().join("pack-md (2).zip")
+        );
+        assert_eq!(
+            alloc.allocate_zip(Path::new("in/a:b.zip")),
+            tmp.path().join("a_b-md.zip")
+        );
+    }
+
+    #[test]
     fn stems_are_made_safe_for_every_os() {
         assert_eq!(sanitize_stem("a:b*c?"), "a_b_c_");
         assert_eq!(sanitize_stem("trailing. "), "trailing");
         assert_eq!(sanitize_stem(""), "document");
+        assert_eq!(sanitize_stem("CON"), "_CON");
+        assert_eq!(sanitize_stem("nul.txt"), "_nul.txt");
+        assert_eq!(sanitize_stem("com1"), "_com1");
+        assert_eq!(sanitize_stem("COM0"), "COM0");
+        assert_eq!(sanitize_stem("console"), "console");
     }
 
     #[test]

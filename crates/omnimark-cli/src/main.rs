@@ -12,6 +12,7 @@ use omnimark_core::ocr::models::{
 };
 use omnimark_core::ocr::{build_engine, EngineConfig, OcrChoice, OcrLanguage};
 use omnimark_core::output::{write_atomic, OutputAllocator};
+use omnimark_core::zip_output::{write_zip_file, ZipOutput};
 use omnimark_core::{convert_isolated, CancelToken, ConvertContext, ConvertOptions};
 
 #[derive(Parser)]
@@ -89,6 +90,23 @@ impl From<LangArg> for OcrLanguage {
     }
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum ZipArg {
+    Folder,
+    Single,
+    Zip,
+}
+
+impl From<ZipArg> for ZipOutput {
+    fn from(arg: ZipArg) -> Self {
+        match arg {
+            ZipArg::Folder => Self::Folder,
+            ZipArg::Single => Self::Single,
+            ZipArg::Zip => Self::Zip,
+        }
+    }
+}
+
 #[derive(Args)]
 struct ConvertArgs {
     #[arg(required = true)]
@@ -118,6 +136,10 @@ struct ConvertArgs {
     /// OCR language.
     #[arg(long, value_enum, default_value = "auto")]
     ocr_lang: LangArg,
+    /// What a `.zip` becomes: one combined file like MarkItDown (`single`), a folder tree
+    /// (`folder`) or `<name>-md.zip` (`zip`). Ignored with `--stdout`, which prints the combined text.
+    #[arg(long, value_enum, default_value = "single")]
+    zip_output: ZipArg,
     #[command(flatten)]
     models: ModelsDir,
 }
@@ -246,6 +268,42 @@ fn convert(args: ConvertArgs) -> ExitCode {
                 }
             }
             continue;
+        }
+
+        if input
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+        {
+            match write_zip_file(
+                args.zip_output.into(),
+                &registry,
+                input,
+                &allocator,
+                &options,
+                &cancel,
+                &progress,
+            ) {
+                Ok(Some(written)) => {
+                    println!(
+                        "ok {} -> {} ({} files converted, {} skipped)",
+                        input.display(),
+                        written.output.display(),
+                        written.converted,
+                        written.skipped
+                    );
+                    for warning in &written.warnings {
+                        eprintln!("warning {}: {warning}", input.display());
+                    }
+                    continue;
+                }
+                // An Office file with a .zip name: the normal converters take it.
+                Ok(None) => {}
+                Err(error) => {
+                    eprintln!("error {}: {error}", input.display());
+                    failed = true;
+                    continue;
+                }
+            }
         }
 
         let target = allocator.allocate(input);
