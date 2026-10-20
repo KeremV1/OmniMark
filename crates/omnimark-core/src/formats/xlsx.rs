@@ -246,7 +246,7 @@ fn store_sheet_images(
         match text {
             Some(text) => lines.push(format!("{md}\n\n{}\n", block_markdown(&text))),
             // Extraction off and nothing recognized: an empty `![alt]()` would say nothing.
-            None if link.is_none() => {}
+            None if !ctx.options.extract_images => {}
             None => lines.push(md),
         }
     }
