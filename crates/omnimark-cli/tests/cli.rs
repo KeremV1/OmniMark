@@ -99,10 +99,7 @@ fn models_list_reports_missing_files() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("text-detection.onnx") && stdout.contains("text-recognition.onnx"));
     assert_eq!(stdout.matches("missing").count(), 2, "{stdout}");
-    assert!(
-        stdout.lines().any(|line| line.starts_with("tesseract  ")),
-        "{stdout}"
-    );
+    assert!(!stdout.contains("tesseract"), "{stdout}");
 }
 
 #[test]
@@ -136,13 +133,8 @@ fn ocr_values_are_validated_and_documented() {
         .output()
         .unwrap();
     let help = String::from_utf8_lossy(&help.stdout);
-    assert!(
-        help.contains("--ocr")
-            && help.contains("--ocr-lang")
-            && help.contains("--models-dir")
-            && help.contains("--tesseract-path")
-    );
-    assert!(help.contains("tesseract"));
+    assert!(help.contains("--ocr") && help.contains("--ocr-lang") && help.contains("--models-dir"));
+    assert!(!help.contains("tesseract"));
 }
 
 #[test]

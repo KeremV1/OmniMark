@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use omnimark_core::ocr::{EngineConfig, EngineKind, OcrChoice, OcrLanguage};
+use omnimark_core::ocr::EngineConfig;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -13,25 +13,12 @@ pub enum Language {
     En,
 }
 
-/// OCR (text recognition) settings; off by default.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// OCR (text recognition) settings; off by default. The engine and language are automatic;
+/// old files may still hold `engine`, `language` and `tesseractPath`, which are ignored.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct OcrSettings {
     pub enabled: bool,
-    pub engine: OcrChoice,
-    pub language: OcrLanguage,
-    pub tesseract_path: Option<PathBuf>,
-}
-
-impl Default for OcrSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            engine: OcrChoice::Auto,
-            language: OcrLanguage::Auto,
-            tesseract_path: None,
-        }
-    }
 }
 
 /// Missing fields take their defaults, so an older or partial file keeps the fields it has
@@ -103,21 +90,12 @@ impl Settings {
         if !self.output_dir.is_absolute() {
             self.output_dir = default_output_dir.to_path_buf();
         }
-        if self
-            .ocr
-            .tesseract_path
-            .as_ref()
-            .is_some_and(|p| !p.is_absolute())
-        {
-            self.ocr.tesseract_path = None;
-        }
         self
     }
 
     pub fn engine_config(&self, models_root: &Path) -> EngineConfig {
         EngineConfig {
             models_root: Some(models_root.to_path_buf()),
-            tesseract_path: self.ocr.tesseract_path.clone(),
         }
     }
 
@@ -127,17 +105,6 @@ impl Settings {
         }
         let json = serde_json::to_string_pretty(self).map_err(std::io::Error::other)?;
         omnimark_core::output::write_atomic(path, &json)
-    }
-}
-/// The OCR language to use: `Auto` follows the interface language (itself `Auto` = system),
-/// except for Tesseract, whose own `Auto` picks `tur+eng` from what is installed (an explicit
-/// language is strict there and would fail when its data is missing).
-pub fn effective_ocr_language(settings: &Settings, engine: Option<EngineKind>) -> OcrLanguage {
-    match (settings.ocr.language, settings.language) {
-        (OcrLanguage::Auto, _) if engine == Some(EngineKind::Tesseract) => OcrLanguage::Auto,
-        (OcrLanguage::Auto, Language::Tr) => OcrLanguage::Tr,
-        (OcrLanguage::Auto, Language::En) => OcrLanguage::En,
-        (language, _) => language,
     }
 }
 
@@ -236,58 +203,28 @@ mod tests {
         assert_eq!(s.ocr, OcrSettings::default());
         assert!(!s.ocr.enabled);
         let mut on = Settings::defaults(dir.path());
-        let tesseract = dir.path().join("tesseract.exe");
-        on.ocr = OcrSettings {
-            enabled: true,
-            engine: OcrChoice::Tesseract,
-            language: OcrLanguage::Tr,
-            tesseract_path: Some(tesseract.clone()),
-        };
+        on.ocr = OcrSettings { enabled: true };
         on.save(&path).unwrap();
         assert_eq!(Settings::load(&path, dir.path()).ocr, on.ocr);
-        assert!(std::fs::read_to_string(&path)
-            .unwrap()
-            .contains(r#""engine": "tesseract""#));
         let config = on.engine_config(dir.path());
-        assert_eq!(config.tesseract_path, Some(tesseract));
         assert_eq!(config.models_root.as_deref(), Some(dir.path()));
+    }
+
+    #[test]
+    fn old_ocr_fields_are_ignored() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
         std::fs::write(
             &path,
-            r#"{"ocr": {"enabled": true, "tesseractPath": "relative/tesseract"}}"#,
+            r#"{"workers": 2, "language": "tr", "ocr": {"enabled": true, "engine": "tesseract", "language": "tr", "tesseractPath": "C:/t/tesseract.exe"}}"#,
         )
         .unwrap();
-        let partial = Settings::load(&path, dir.path());
-        assert!(partial.ocr.enabled);
-        assert_eq!(partial.ocr.engine, OcrChoice::Auto);
-        assert_eq!(partial.ocr.tesseract_path, None);
-    }
-
-    #[test]
-    fn auto_ocr_language_follows_the_interface_language() {
-        let mut s = Settings::defaults(Path::new("/x"));
-        assert_eq!(effective_ocr_language(&s, None), OcrLanguage::Auto);
-        s.language = Language::Tr;
-        for kind in [EngineKind::Windows, EngineKind::Ocrs] {
-            assert_eq!(effective_ocr_language(&s, Some(kind)), OcrLanguage::Tr);
-        }
-        s.language = Language::En;
-        assert_eq!(
-            effective_ocr_language(&s, Some(EngineKind::Ocrs)),
-            OcrLanguage::En
-        );
-        s.ocr.language = OcrLanguage::En;
-        assert_eq!(effective_ocr_language(&s, None), OcrLanguage::En);
-    }
-
-    #[test]
-    fn auto_ocr_language_stays_auto_for_tesseract_but_explicit_stays_strict() {
-        let mut s = Settings::defaults(Path::new("/x"));
-        s.language = Language::Tr;
-        let t = Some(EngineKind::Tesseract);
-        assert_eq!(effective_ocr_language(&s, t), OcrLanguage::Auto);
-        s.ocr.language = OcrLanguage::Tr;
-        assert_eq!(effective_ocr_language(&s, t), OcrLanguage::Tr);
-        s.ocr.language = OcrLanguage::En;
-        assert_eq!(effective_ocr_language(&s, t), OcrLanguage::En);
+        let s = Settings::load(&path, dir.path());
+        assert!(s.ocr.enabled);
+        assert_eq!(s.workers, 2);
+        assert_eq!(s.language, Language::Tr);
+        s.save(&path).unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(!saved.contains("tesseract") && !saved.contains("\"engine\""));
     }
 }

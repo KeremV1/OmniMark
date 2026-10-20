@@ -52,8 +52,11 @@ impl DocumentOcr {
         if let Some(hit) = self.cache.get(&key) {
             return Ok(hit);
         }
+        if self.limit_reached(doc) {
+            return Ok(None);
+        }
         let text = match decode(bytes) {
-            Ok(Some(image)) => self.run(&image, cancel, doc)?,
+            Ok(Some(image)) => self.run(&image, doc)?,
             Ok(None) => None,
             Err(_) => {
                 doc.warn_once(DECODE_WARNING);
@@ -76,27 +79,27 @@ impl DocumentOcr {
         if let Some(hit) = self.cache.get(&key) {
             return Ok(hit);
         }
-        let text = self.run(image, cancel, doc)?;
+        let text = self.run(image, doc)?;
         self.cache.insert(key, text.clone());
         Ok(text)
     }
 
-    /// Only cancellation is an error; an engine failure becomes a warning.
-    fn run(
-        &mut self,
-        image: &OcrImage,
-        cancel: &CancelToken,
-        doc: &mut Document,
-    ) -> Result<Option<String>> {
-        if self.calls >= MAX_OCR_IMAGES {
+    /// True (with a one-time warning) once the per-document engine-call limit is used up.
+    fn limit_reached(&self, doc: &mut Document) -> bool {
+        let reached = self.calls >= MAX_OCR_IMAGES;
+        if reached {
             doc.warn_once(OCR_LIMIT_WARNING);
+        }
+        reached
+    }
+
+    /// Only cancellation is an error; an engine failure becomes a warning.
+    fn run(&mut self, image: &OcrImage, doc: &mut Document) -> Result<Option<String>> {
+        if self.limit_reached(doc) {
             return Ok(None);
         }
         self.calls += 1;
-        match self
-            .engine
-            .recognize_cancellable(image, &self.language, cancel)
-        {
+        match self.engine.recognize(image, &self.language) {
             Ok(text) => Ok(clean_text(&text)),
             Err(OcrError::Cancelled) => Err(ConvertError::Cancelled),
             Err(error) => {
@@ -240,6 +243,8 @@ mod tests {
             .is_some());
         let over = ocr.image_bytes(&png(5000), &cancel, &mut doc).unwrap();
         assert_eq!(over, None);
+        // Over the limit nothing is decoded: junk bytes give the limit warning, not a decode one.
+        assert_eq!(ocr.image_bytes(b"junk", &cancel, &mut doc).unwrap(), None);
         ocr.image_bytes(&png(5001), &cancel, &mut doc).unwrap();
         assert_eq!(engine.calls(), MAX_OCR_IMAGES);
         assert_eq!(doc.warnings, vec![OCR_LIMIT_WARNING.to_string()]);

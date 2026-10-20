@@ -34,12 +34,6 @@ jobs:
         run: bash scripts/fetch-pdfium.sh
       - run: npm ci
       - run: npm run build
-      - name: Tesseract (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng
-      - name: Tesseract (macOS)
-        if: runner.os == 'macOS'
-        run: brew install tesseract tesseract-lang
       - name: Cache ocrs models
         id: ocrs-cache
         uses: actions/cache@v4

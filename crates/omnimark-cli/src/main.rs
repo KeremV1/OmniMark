@@ -10,7 +10,7 @@ use omnimark_core::ocr::models::{
     default_models_root, fetch_ocrs, ocrs_dir, ocrs_status, resolve_models_root, DownloadProgress,
     MODELS_ENV,
 };
-use omnimark_core::ocr::{build_engine, tesseract_engine, EngineConfig, OcrChoice, OcrLanguage};
+use omnimark_core::ocr::{build_engine, EngineConfig, OcrChoice, OcrLanguage};
 use omnimark_core::output::{write_atomic, OutputAllocator};
 use omnimark_core::{convert_isolated, CancelToken, ConvertContext, ConvertOptions};
 
@@ -35,9 +35,6 @@ struct ModelsDir {
     /// Models folder [default: OMNIMARK_MODELS_DIR, then the local data folder].
     #[arg(long)]
     models_dir: Option<PathBuf>,
-    /// The tesseract program [default: OMNIMARK_TESSERACT, PATH, then the usual install folders].
-    #[arg(long)]
-    tesseract_path: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -62,7 +59,6 @@ enum ModelName {
 enum OcrArg {
     Auto,
     Windows,
-    Tesseract,
     Ocrs,
 }
 
@@ -78,7 +74,6 @@ impl From<OcrArg> for OcrChoice {
         match arg {
             OcrArg::Auto => Self::Auto,
             OcrArg::Windows => Self::Windows,
-            OcrArg::Tesseract => Self::Tesseract,
             OcrArg::Ocrs => Self::Ocrs,
         }
     }
@@ -111,7 +106,7 @@ struct ConvertArgs {
     /// next to the executable].
     #[arg(long, env = "OMNIMARK_PDFIUM_PATH")]
     pdfium: Option<PathBuf>,
-    /// Read text in images: `--ocr` (auto), `--ocr=windows`, `--ocr=tesseract` or `--ocr=ocrs`. Off by default.
+    /// Read text in images: `--ocr` (auto), `--ocr=windows` or `--ocr=ocrs`. Off by default.
     #[arg(
         long,
         value_enum,
@@ -145,7 +140,6 @@ fn models_root(dir: &ModelsDir) -> Option<PathBuf> {
 fn engine_config(dir: &ModelsDir) -> EngineConfig {
     EngineConfig {
         models_root: models_root(dir),
-        tesseract_path: dir.tesseract_path.clone(),
     }
 }
 
@@ -170,14 +164,6 @@ fn models(command: ModelsCommand) -> ExitCode {
                 status.name,
                 status.size as f64 / 1e6
             );
-        }
-        match tesseract_engine::resolve_path(dir.tesseract_path.as_deref()) {
-            Some(path) => println!(
-                "tesseract  {}  languages: {}",
-                path.display(),
-                tesseract_engine::languages(&path).join(", ")
-            ),
-            None => println!("tesseract  not found (https://github.com/tesseract-ocr/tesseract)"),
         }
         return ExitCode::SUCCESS;
     }
