@@ -196,7 +196,12 @@ fn extract_round(
     let page_count = pages.len() as usize;
     let mut taken = Vec::new();
     let mut pending = 0usize;
-    for (i, page) in pages.iter().enumerate().skip(start) {
+    // Indexed access: `iter().skip(start)` would load every earlier page again each round.
+    for i in start..page_count {
+        // Like the page iterator, stop at the first page that cannot be loaded.
+        let Ok(page) = pages.get(i as PdfPageIndex) else {
+            break;
+        };
         ctx.check_cancel()?;
         let glyphs = page_glyphs(&page)?;
         let words = layout::group_words(&glyphs);
