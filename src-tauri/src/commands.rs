@@ -3,6 +3,8 @@
 use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 
+use omnimark_core::ocr::models::{fetch_ocrs, ocrs_download_size, DownloadError};
+use omnimark_core::ocr::{availability, build_engine, select, Availability, EngineKind};
 use omnimark_core::{CancelToken, ConvertOptions};
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -12,7 +14,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::error::AppError;
 use crate::inspect::{inspect, InspectResult};
 use crate::jobs::{run_batch, BatchRequest, ConvertEvent};
-use crate::settings::Settings;
+use crate::settings::{effective_ocr_language, OcrSettings, Settings};
 use crate::AppState;
 
 /// Largest dropped selection (files after folder expansion) handled in one go.
@@ -69,17 +71,31 @@ pub async fn convert(
     let _guard = RunningGuard(&state);
 
     let settings = current_settings(&state);
-    let request = BatchRequest {
-        files,
-        output_dir: settings.output_dir,
-        options: ConvertOptions {
-            extract_images: settings.extract_images,
-            ..ConvertOptions::default()
-        },
-        workers: settings.workers,
-    };
+    let models_root = state.models_root.clone();
     let registry = state.registry.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let mut options = ConvertOptions {
+            extract_images: settings.extract_images,
+            ..ConvertOptions::default()
+        };
+        let mut ocr_warning = None;
+        // One engine per batch, built here (never at startup) and dropped with `request`.
+        if settings.ocr.enabled {
+            match build_engine(settings.ocr.engine, &settings.engine_config(&models_root)) {
+                Ok(engine) => {
+                    options.ocr = Some(engine);
+                    options.ocr_language = effective_ocr_language(&settings);
+                }
+                Err(e) => ocr_warning = Some(format!("OCR was skipped: {e}.")),
+            }
+        }
+        let request = BatchRequest {
+            files,
+            output_dir: settings.output_dir,
+            options,
+            workers: settings.workers,
+            ocr_warning,
+        };
         run_batch(&registry, &request, &cancel, &|event| {
             let _ = on_event.send(event);
         });
@@ -402,9 +418,187 @@ pub fn set_settings(
     Ok(settings)
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OcrStatus {
+    #[serde(flatten)]
+    pub availability: Availability,
+    pub ocrs_download_bytes: u64,
+    pub selected: Option<EngineKind>,
+    pub downloading: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "event",
+    content = "data"
+)]
+pub enum DownloadEvent {
+    Progress { downloaded: u64, total: u64 },
+    Finished,
+    Failed { message: String },
+    Cancelled,
+}
+
+/// Which engines this machine offers; asks Windows and runs `tesseract`, so off the UI thread.
+#[tauri::command]
+pub async fn ocr_status(
+    state: State<'_, AppState>,
+    draft: Option<OcrSettings>,
+) -> Result<OcrStatus, AppError> {
+    let mut settings = current_settings(&state);
+    // The settings dialog passes its unsaved choices so the status follows them.
+    if let Some(draft) = draft {
+        settings.ocr = draft;
+        settings = settings.sanitized(&state.default_output_dir);
+    }
+    let models_root = state.models_root.clone();
+    let downloading = lock(&state.downloading).is_some();
+    tauri::async_runtime::spawn_blocking(move || {
+        let availability = availability(&settings.engine_config(&models_root));
+        let selected = select(settings.ocr.engine, &availability);
+        OcrStatus {
+            availability,
+            ocrs_download_bytes: ocrs_download_size(),
+            selected,
+            downloading,
+        }
+    })
+    .await
+    .map_err(|e| AppError::Tauri(e.to_string()))
+}
+
+/// Clears the "downloading" slot when the command ends, even on a panic.
+struct DownloadGuard<'a>(&'a AppState);
+
+impl Drop for DownloadGuard<'_> {
+    fn drop(&mut self) {
+        *lock(&self.0.downloading) = None;
+    }
+}
+
+fn download_outcome(result: Result<(), DownloadError>) -> DownloadEvent {
+    match result {
+        Ok(()) => DownloadEvent::Finished,
+        Err(DownloadError::Cancelled) => DownloadEvent::Cancelled,
+        Err(e) => DownloadEvent::Failed {
+            message: e.to_string(),
+        },
+    }
+}
+
+/// Downloads the ocrs models. The download runs on its own thread; this command returns as
+/// soon as the user cancels, without joining it: ureq cannot interrupt a blocked read, so the
+/// thread may need until the body timeout to notice. It then deletes its own `.part` file
+/// (unique per download), so a new download started meanwhile may safely run concurrently.
+#[tauri::command]
+pub async fn download_ocr_models(
+    state: State<'_, AppState>,
+    on_event: Channel<DownloadEvent>,
+) -> Result<(), AppError> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::mpsc::RecvTimeoutError;
+
+    let cancel = CancelToken::new();
+    {
+        let mut downloading = lock(&state.downloading);
+        if downloading.is_some() {
+            return Err(AppError::Busy);
+        }
+        *downloading = Some(cancel.clone());
+    }
+    let _guard = DownloadGuard(&state);
+
+    let models_root = state.models_root.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker_cancel = cancel.clone();
+    let worker_events = on_event.clone();
+    std::thread::spawn(move || {
+        let last_percent = AtomicU64::new(u64::MAX);
+        let result = fetch_ocrs(&models_root, &worker_cancel, &|p| {
+            let percent = (p.downloaded * 100).checked_div(p.total).unwrap_or(0);
+            let changed = last_percent.swap(percent, Ordering::Relaxed) != percent;
+            if changed && !worker_cancel.is_cancelled() {
+                let _ = worker_events.send(DownloadEvent::Progress {
+                    downloaded: p.downloaded,
+                    total: p.total,
+                });
+            }
+        });
+        let _ = tx.send(result);
+    });
+
+    let outcome = tauri::async_runtime::spawn_blocking(move || loop {
+        match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+            Ok(result) => break Some(download_outcome(result)),
+            Err(RecvTimeoutError::Timeout) if cancel.is_cancelled() => break None,
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => {
+                break Some(DownloadEvent::Failed {
+                    message: "the download stopped unexpectedly".into(),
+                })
+            }
+        }
+    })
+    .await
+    .map_err(|e| AppError::Tauri(e.to_string()))?;
+    let _ = on_event.send(outcome.unwrap_or(DownloadEvent::Cancelled));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_download(state: State<'_, AppState>) {
+    if let Some(token) = lock(&state.downloading).as_ref() {
+        token.cancel();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_events_serialize_like_convert_events() {
+        assert_eq!(
+            serde_json::to_value(DownloadEvent::Progress {
+                downloaded: 1,
+                total: 2
+            })
+            .unwrap(),
+            serde_json::json!({"event": "progress", "data": {"downloaded": 1, "total": 2}})
+        );
+        assert_eq!(
+            serde_json::to_value(DownloadEvent::Finished).unwrap(),
+            serde_json::json!({"event": "finished"})
+        );
+        let status = OcrStatus {
+            availability: Availability::default(),
+            ocrs_download_bytes: 5,
+            selected: Some(EngineKind::Ocrs),
+            downloading: false,
+        };
+        let json = serde_json::to_value(status).unwrap();
+        assert_eq!(json["selected"], "ocrs");
+        assert_eq!(json["windowsLanguages"], serde_json::json!([]));
+        assert_eq!(json["tesseractPath"], serde_json::Value::Null);
+        assert_eq!(json["tesseractLanguages"], serde_json::json!([]));
+        assert_eq!(json["ocrsDownloadBytes"], 5);
+    }
+
+    #[test]
+    fn download_results_map_to_events() {
+        assert_eq!(download_outcome(Ok(())), DownloadEvent::Finished);
+        assert_eq!(
+            download_outcome(Err(DownloadError::Cancelled)),
+            DownloadEvent::Cancelled
+        );
+        assert!(matches!(
+            download_outcome(Err(DownloadError::Network("x".into()))),
+            DownloadEvent::Failed { .. }
+        ));
+    }
 
     #[test]
     fn resolve_output_path_confines_reads_to_markdown_inside_root() {

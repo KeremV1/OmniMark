@@ -1,5 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 /** Mirrors `omnimark_core::detect::FileKind` (serialized camelCase). */
 export type FileKind =
@@ -42,12 +43,43 @@ export interface FileEntry {
 
 export type SettingsLanguage = 'auto' | 'tr' | 'en';
 
+export type OcrEngineChoice = 'auto' | 'windows' | 'tesseract' | 'ocrs';
+export type OcrLanguage = 'auto' | 'tr' | 'en';
+
+export interface OcrSettings {
+  enabled: boolean;
+  engine: OcrEngineChoice;
+  language: OcrLanguage;
+  /** Absolute path of the `tesseract` program; `null` = search for it. */
+  tesseractPath: string | null;
+}
+
 export interface Settings {
   outputDir: string;
   extractImages: boolean;
   workers: number;
   language: SettingsLanguage;
+  ocr: OcrSettings;
 }
+
+/** What this machine offers for OCR (`ocr_status`). */
+export interface OcrStatus {
+  windowsBuilt: boolean;
+  windowsLanguages: string[];
+  tesseractPath: string | null;
+  tesseractLanguages: string[];
+  ocrsBuilt: boolean;
+  ocrsModels: boolean;
+  ocrsDownloadBytes: number;
+  selected: 'windows' | 'tesseract' | 'ocrs' | null;
+  downloading: boolean;
+}
+
+export type DownloadEvent =
+  | { event: 'progress'; data: { downloaded: number; total: number } }
+  | { event: 'finished' }
+  | { event: 'failed'; data: { message: string } }
+  | { event: 'cancelled' };
 
 export interface OutlineHeading {
   level: number;
@@ -149,4 +181,32 @@ export async function pickFiles(allFilesLabel: string): Promise<string[]> {
 export async function pickFolder(): Promise<string | null> {
   const picked = await open({ multiple: false, directory: true });
   return picked ?? null;
+}
+
+/** `draft` = the dialog's unsaved OCR choices; omitted = the saved settings. */
+export function ocrStatus(draft?: OcrSettings): Promise<OcrStatus> {
+  return invoke('ocr_status', { draft: draft ?? null });
+}
+
+/** Resolves when the download ends (see the last event for the outcome); rejects with an `AppError` (for example `busy`). */
+export function downloadOcrModels(onEvent: (e: DownloadEvent) => void): Promise<void> {
+  const channel = new Channel<DownloadEvent>();
+  channel.onmessage = onEvent;
+  return invoke('download_ocr_models', { onEvent: channel });
+}
+
+export function cancelDownload(): Promise<void> {
+  return invoke('cancel_download');
+}
+
+/** Picks one program file (the Tesseract executable). */
+export async function pickProgram(): Promise<string | null> {
+  const picked = await open({ multiple: false, directory: false });
+  return picked ?? null;
+}
+
+export const TESSERACT_URL = 'https://github.com/tesseract-ocr/tesseract';
+
+export function openTesseractPage(): Promise<void> {
+  return openUrl(TESSERACT_URL);
 }

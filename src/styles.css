@@ -1269,3 +1269,78 @@ body.is-dragging::after {
     transition: none !important;
   }
 }
+
+/* ---------- OCR settings ---------- */
+
+.dialog fieldset.ocr {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.ocr legend {
+  padding: 0 6px;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.field-path.is-placeholder {
+  color: var(--ink-3);
+}
+
+.ocr-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.ocr .field a.about-link {
+  align-self: flex-start;
+  font-size: 12px;
+}
+
+.ocr .field a[hidden],
+.ocr .field button[hidden],
+.ocr .ocr-progress[hidden],
+.ocr .field[hidden],
+.ocr .field-row [hidden] {
+  display: none;
+}
+
+.ocr .field > .btn {
+  align-self: flex-start;
+}
+
+.ocr-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ocr-progress progress {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  accent-color: var(--accent);
+}
+
+.ocr-progress-text {
+  min-width: 7.5em;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
