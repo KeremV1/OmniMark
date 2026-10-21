@@ -1075,6 +1075,19 @@ body.is-dragging::after {
   color: inherit;
 }
 
+.update-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.update-notice[hidden] {
+  display: none;
+}
+
 .footer-actions {
   display: flex;
   gap: 8px;

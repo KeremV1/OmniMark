@@ -121,6 +121,13 @@ const ptBR: Messages = {
   'settings.zipFolder': 'Uma pasta com a mesma estrutura',
   'settings.zipSingle': 'Um único arquivo Markdown combinado',
   'settings.zipZip': 'Um ZIP com os arquivos Markdown',
+  'update.available': 'Atualização disponível (v{version})',
+  'update.install': 'Instalar',
+  'update.installing': 'Instalando…',
+  'update.failed': 'Falha na atualização',
+  'settings.checkUpdates': 'Verificar atualizações ao iniciar',
+  'settings.checkUpdatesHint': 'Conecta-se ao GitHub uma vez ao iniciar; nada mais é enviado.',
+  'settings.thirdParty': 'Avisos de terceiros',
 };
 
 export default ptBR;

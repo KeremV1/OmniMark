@@ -1,5 +1,6 @@
 import type { Settings } from '../api';
 import type { Filter, QueueState } from '../queue';
+import type { UpdateState } from '../updater';
 
 export interface Notice {
   tone: 'info' | 'error';
@@ -14,6 +15,8 @@ export interface View {
   preview: string | null;
   notice: Notice | null;
   dragging: boolean;
+  /** A newer release was found (shown in the footer). */
+  update: UpdateState | null;
 }
 
 /** What the UI modules may ask for; implemented in `main.ts`. */
@@ -37,6 +40,8 @@ export interface Actions {
   dismissFirstRun(): void;
   openOutputDir(): void;
   openSettings(): void;
+  /** Downloads and installs the pending update, then restarts. */
+  installUpdate(): void;
   dismissNotice(): void;
   setDragging(value: boolean): void;
   /** Shows a command failure in the notice strip. */

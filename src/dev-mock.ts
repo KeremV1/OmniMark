@@ -59,6 +59,7 @@ let settings: Settings = {
   ocr: { enabled: false },
   onboarded: new URLSearchParams(location.search).get('scenario') !== 'firstrun',
   zipOutput: 'folder',
+  checkUpdates: true,
 };
 let cancelDownload = false;
 let cancelRun: (() => void) | null = null;

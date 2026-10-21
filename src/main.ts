@@ -27,6 +27,7 @@ import {
   setSelected,
 } from './queue';
 import type { Actions, View } from './ui/context';
+import { findUpdate, installUpdate, shouldCheckForUpdates } from './updater';
 import { openDetailsDialog } from './ui/details';
 import { createDropzone, listenDragDrop } from './ui/dropzone';
 import { createFirstRun } from './ui/firstrun';
@@ -48,6 +49,7 @@ const FALLBACK_SETTINGS: Settings = {
   ocr: { enabled: false },
   onboarded: true,
   zipOutput: 'folder',
+  checkUpdates: true,
 };
 
 let view: View = {
@@ -56,6 +58,7 @@ let view: View = {
   preview: null,
   notice: null,
   dragging: false,
+  update: null,
 };
 
 function isAppError(e: unknown): e is AppError {
@@ -164,6 +167,15 @@ const actions: Actions = {
   },
   openSettings() {
     openSettingsDialog({ settings: view.settings, onSave: saveSettings, describeError: errorText });
+  },
+  installUpdate() {
+    const current = view.update;
+    if (!current || current.phase === 'installing') return;
+    setView({ update: { ...current, phase: 'installing' } });
+    installUpdate().catch((err: unknown) => {
+      console.error('update install failed', err);
+      setView({ update: { ...current, phase: 'failed' } });
+    });
   },
   dismissNotice() {
     setView({ notice: null });
@@ -291,6 +303,12 @@ async function boot(): Promise<void> {
       return false;
     },
   });
+
+  if (shouldCheckForUpdates(view.settings)) {
+    void findUpdate().then((version) => {
+      if (version) setView({ update: { version, phase: 'available' } });
+    });
+  }
 
   listenDragDrop(actions).catch((err: unknown) => console.error('drag and drop unavailable', err));
   scenario?.(actions);

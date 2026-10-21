@@ -23,6 +23,7 @@ export interface SettingsDialogOptions {
 }
 
 const AUTHOR_URL = 'https://github.com/KeremV1';
+const NOTICES_URL = 'https://github.com/KeremV1/OmniMark/blob/main/THIRD-PARTY-NOTICES.md';
 const MIN_WORKERS = 1;
 const MAX_WORKERS = 8;
 
@@ -104,6 +105,9 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     ...ZIP_OUTPUTS.map(([value, key]) => h('option', { value }, t(key))),
   ) as HTMLSelectElement;
   zipOutput.value = draft.zipOutput;
+
+  const updates = h('input', { type: 'checkbox', id: 'set-updates' }) as HTMLInputElement;
+  updates.checked = draft.checkUpdates;
 
   // ---- OCR section ----
   const ocrEnabled = h('input', { type: 'checkbox', id: 'set-ocr' }) as HTMLInputElement;
@@ -202,13 +206,19 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     setDialogError(errorLine, null);
     openUrl(AUTHOR_URL).catch(onError);
   });
+  const notices = h('a', { href: NOTICES_URL, class: 'about-link' }, t('settings.thirdParty'));
+  notices.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    setDialogError(errorLine, null);
+    openUrl(NOTICES_URL).catch(onError);
+  });
   const about = h(
     'section',
     { class: 'about', 'aria-labelledby': 'about-title' },
     h('h3', { class: 'about-title', id: 'about-title' }, t('settings.about')),
     h('p', {}, h('strong', {}, 'OmniMark'), version),
     h('p', {}, 'MoNoR · ', author),
-    h('p', {}, t('settings.license')),
+    h('p', {}, t('settings.license'), ' · ', notices),
   );
 
   const cancel = h('button', { class: 'btn', type: 'button' }, t('action.cancel'));
@@ -238,6 +248,12 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     ),
     h('div', { class: 'field field-inline' }, h('label', { for: 'set-lang' }, t('settings.language')), language),
     h('div', { class: 'field field-inline' }, h('label', { for: 'set-zip' }, t('settings.zipOutput')), zipOutput),
+    h(
+      'div',
+      { class: 'field field-check' },
+      updates,
+      h('label', { for: 'set-updates' }, h('span', {}, t('settings.checkUpdates')), h('small', { class: 'hint' }, t('settings.checkUpdatesHint'))),
+    ),
     ocrSection,
     h('div', { class: 'field' }, logs),
     about,
@@ -260,6 +276,7 @@ export function openSettingsDialog({ settings, onSave, describeError }: Settings
     draft.extractImages = images.checked;
     draft.language = language.value as SettingsLanguage;
     draft.zipOutput = zipOutput.value as ZipOutput;
+    draft.checkUpdates = updates.checked;
     draft.ocr = { enabled: ocrEnabled.checked };
     save.disabled = true;
     setDialogError(errorLine, null);

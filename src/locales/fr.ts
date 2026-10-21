@@ -121,6 +121,13 @@ const fr: Messages = {
   'settings.zipFolder': 'Un dossier de même structure',
   'settings.zipSingle': 'Un seul fichier Markdown combiné',
   'settings.zipZip': 'Un ZIP des fichiers Markdown',
+  'update.available': 'Mise à jour disponible (v{version})',
+  'update.install': 'Installer',
+  'update.installing': 'Installation…',
+  'update.failed': 'Échec de la mise à jour',
+  'settings.checkUpdates': 'Rechercher les mises à jour au démarrage',
+  'settings.checkUpdatesHint': "Se connecte une fois à GitHub au démarrage ; rien d'autre n'est envoyé.",
+  'settings.thirdParty': 'Mentions des tiers',
 };
 
 export default fr;
