@@ -59,6 +59,8 @@ export interface Settings {
   /** The first-run card was answered. */
   onboarded: boolean;
   zipOutput: ZipOutput;
+  /** Look for a new version at startup. */
+  checkUpdates: boolean;
 }
 
 /** Which OCR engine will run and whether it is ready (`ocr_status`). */

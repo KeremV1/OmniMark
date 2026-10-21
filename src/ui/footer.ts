@@ -3,6 +3,7 @@ import { modKeyLabel } from '../platform';
 import { convertiblePaths, counts, type Filter } from '../queue';
 import type { Actions, View } from './context';
 import { h, setText } from './dom';
+import { updateNotice } from './update';
 
 export interface Footer {
   el: HTMLElement;
@@ -31,11 +32,20 @@ export function createFooter(actions: Actions): Footer {
     onclick: () => actions.convertSelected(),
   }) as HTMLButtonElement;
 
+  const updateText = h('span', { class: 'update-text' });
+  const updateButton = h('button', {
+    class: 'btn btn-small',
+    type: 'button',
+    onclick: () => actions.installUpdate(),
+  }) as HTMLButtonElement;
+  const updateEl = h('div', { class: 'update-notice', role: 'status', hidden: true }, updateText, updateButton);
+
   const filters = h('div', { class: 'filters', role: 'group', 'aria-label': t('filter.label') }, ...buttons.map((b) => b.btn));
   const el = h(
     'footer',
     { class: 'footer' },
     filters,
+    updateEl,
     h('div', { class: 'footer-actions' }, cancel, create),
   );
 
@@ -52,6 +62,13 @@ export function createFooter(actions: Actions): Footer {
       setText(create, t('action.convertCount', { n }));
       create.disabled = n === 0 || view.queue.running;
       cancel.hidden = !view.queue.running;
+      const notice = updateNotice(view.update);
+      updateEl.hidden = notice === null;
+      if (notice) {
+        setText(updateText, t(notice.textKey, { version: notice.version }));
+        setText(updateButton, t(notice.buttonKey));
+        updateButton.disabled = notice.busy;
+      }
     },
   };
 }

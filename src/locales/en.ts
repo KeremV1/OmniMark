@@ -120,6 +120,13 @@ export const en = {
   'settings.zipFolder': 'A folder with the same structure',
   'settings.zipSingle': 'One combined Markdown file',
   'settings.zipZip': 'A ZIP of the Markdown files',
+  'update.available': 'Update available (v{version})',
+  'update.install': 'Install',
+  'update.installing': 'Installing…',
+  'update.failed': 'Update failed',
+  'settings.checkUpdates': 'Check for updates at startup',
+  'settings.checkUpdatesHint': 'Contacts GitHub once at startup; nothing else is sent.',
+  'settings.thirdParty': 'Third-party notices',
 } as const;
 
 export type MessageKey = keyof typeof en;

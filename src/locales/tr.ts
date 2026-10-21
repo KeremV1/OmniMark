@@ -121,6 +121,13 @@ const tr: Messages = {
   'settings.zipFolder': 'Aynı yapıda bir klasör',
   'settings.zipSingle': 'Tek birleşik Markdown dosyası',
   'settings.zipZip': 'Markdown dosyalarının ZIP\'i',
+  'update.available': 'Güncelleme var (v{version})',
+  'update.install': 'Yükle',
+  'update.installing': 'Yükleniyor…',
+  'update.failed': 'Güncelleme başarısız',
+  'settings.checkUpdates': 'Açılışta güncellemeleri denetle',
+  'settings.checkUpdatesHint': "Açılışta GitHub'a bir kez bağlanır; başka veri gönderilmez.",
+  'settings.thirdParty': 'Üçüncü taraf bildirimleri',
 };
 
 export default tr;

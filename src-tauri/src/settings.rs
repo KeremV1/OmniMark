@@ -44,6 +44,8 @@ pub struct Settings {
     pub onboarded: bool,
     /// What a converted `.zip` becomes: a folder tree (default), one combined file or a zip.
     pub zip_output: ZipOutput,
+    /// Look for a new version in the background at startup; on by default, also for old files.
+    pub check_updates: bool,
 }
 
 /// Folder name created under the base folder for converted files.
@@ -86,6 +88,7 @@ impl Settings {
             ocr: OcrSettings::default(),
             onboarded: false,
             zip_output: ZipOutput::default(),
+            check_updates: true,
         }
     }
 
@@ -303,5 +306,21 @@ mod tests {
         let s = Settings::load(&path, dir.path());
         assert_eq!(s.zip_output, ZipOutput::Folder);
         assert_eq!(s.workers, 3);
+    }
+
+    #[test]
+    fn check_updates_defaults_to_true_for_old_files_and_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(Settings::defaults(dir.path()).check_updates);
+        let path = dir.path().join("settings.json");
+        std::fs::write(&path, r#"{"outputDir": "/x", "workers": 2}"#).unwrap();
+        assert!(Settings::load(&path, dir.path()).check_updates);
+        let mut s = Settings::defaults(dir.path());
+        s.check_updates = false;
+        s.save(&path).unwrap();
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains(r#""checkUpdates": false"#));
+        assert!(!Settings::load(&path, dir.path()).check_updates);
     }
 }

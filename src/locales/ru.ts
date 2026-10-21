@@ -121,6 +121,13 @@ const ru: Messages = {
   'settings.zipFolder': 'Папка с той же структурой',
   'settings.zipSingle': 'Один общий файл Markdown',
   'settings.zipZip': 'ZIP с файлами Markdown',
+  'update.available': 'Доступно обновление (v{version})',
+  'update.install': 'Установить',
+  'update.installing': 'Установка…',
+  'update.failed': 'Не удалось обновить',
+  'settings.checkUpdates': 'Проверять обновления при запуске',
+  'settings.checkUpdatesHint': 'Один раз при запуске обращается к GitHub; ничего больше не отправляется.',
+  'settings.thirdParty': 'Уведомления о сторонних компонентах',
 };
 
 export default ru;
