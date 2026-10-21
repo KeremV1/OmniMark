@@ -1,0 +1,137 @@
+name: Release
+# A v* tag builds every platform and uploads the packages to a DRAFT release (named "beta"); the draft is
+# published by hand after a smoke test. workflow_dispatch builds the version in tauri.conf.json.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    # Creates the draft once, so the parallel platform jobs below only upload into it
+    # (tauri-action creating it from four jobs at the same time races).
+    runs-on: ubuntu-22.04
+    outputs:
+      release_id: ${{ steps.draft.outputs.release_id }}
+      version: ${{ steps.draft.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          tag="v${version}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "${tag}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match the app version ${version}" >&2
+            exit 1
+          fi
+          id=$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"${tag}\" and .draft) | .id" | sed -n 1p)
+          if [ -z "${id}" ]; then
+            id=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+              -f tag_name="${tag}" -f target_commitish="${GITHUB_SHA}" \
+              -f name="OmniMark ${tag} (beta)" -F draft=true -F prerelease=false \
+              -f body="Beta release. See the README for installation steps (the app is not code-signed yet)." \
+              --jq .id)
+          fi
+          echo "release_id=${id}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            pdfium: win-x64
+            args: --bundles nsis
+          - name: macOS arm64
+            os: macos-latest
+            pdfium: mac-arm64
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
+          - name: macOS x64
+            # Cross-built on the arm64 runner (macos-13 Intel runners are retired); pdfium is only
+            # loaded at run time, so the x64 library is just bundled, not linked.
+            os: macos-latest
+            pdfium: mac-x64
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles app,dmg
+          - name: Linux x64
+            os: ubuntu-22.04
+            pdfium: linux-x64
+            args: --bundles appimage,deb
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.pdfium }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Fetch pdfium (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-pdfium.ps1
+      - name: Fetch pdfium (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: bash scripts/fetch-pdfium.sh ${{ matrix.pdfium }}
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Ad-hoc signature: Apple silicon refuses to run a completely unsigned app. This is not
+          # a Developer ID signature, so Gatekeeper still warns (README explains how to open it).
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
+        with:
+          releaseId: ${{ needs.draft.outputs.release_id }}
+          tagName: v__VERSION__
+          releaseName: OmniMark v__VERSION__ (beta)
+          releaseDraft: true
+          # Not a GitHub pre-release: /releases/latest (the updater endpoint) skips pre-releases.
+          # The beta status is in the release name instead.
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
+
+  verify:
+    # latest.json is merged by every platform job; check that no platform was lost to a race.
+    needs: [draft, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.draft.outputs.release_id }}
+        run: |
+          url=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            --jq '.assets[] | select(.name == "latest.json") | .url')
+          [ -n "${url}" ] || { echo "latest.json is missing from the release" >&2; exit 1; }
+          gh api -H "Accept: application/octet-stream" "${url}" > latest.json
+          cat latest.json
+          for p in windows-x86_64 darwin-aarch64 darwin-x86_64 linux-x86_64; do
+            node -e "const j=require('./latest.json');process.exit(Object.keys(j.platforms).some(k=>k.startsWith('$p'))?0:1)" \
+              || { echo "latest.json has no entry for $p" >&2; exit 1; }
+          done

@@ -2,11 +2,13 @@
 # Downloads the pinned pdfium build (bblanchon/pdfium-binaries) into vendor/pdfium and verifies its SHA-256.
 set -euo pipefail
 TAG="chromium/8066"
-case "$(uname -s)-$(uname -m)" in
-  Darwin-arm64)  ASSET=pdfium-mac-arm64.tgz;  SHA=336219e80580b93c6523f44db7dc1de59cc497b13a7390ddac84223f68ca162b; LIB=libpdfium.dylib ;;
-  Darwin-x86_64) ASSET=pdfium-mac-x64.tgz;    SHA=841ecac278cdd46288dd065873522cf72f3996560d8978f473d336f01d59942c; LIB=libpdfium.dylib ;;
-  Linux-x86_64)  ASSET=pdfium-linux-x64.tgz;  SHA=0b43f405477cf2cfc4dbff06905093c3309756c6bca1fb9da99234a2ca97fed2; LIB=libpdfium.so ;;
-  *) echo "unsupported platform: $(uname -s)-$(uname -m) (Windows: use fetch-pdfium.ps1)" >&2; exit 1 ;;
+# Optional argument picks the target platform instead of the host (cross builds, e.g. the x64
+# macOS bundle built on an arm64 runner): mac-arm64 | mac-x64 | linux-x64.
+case "${1:-$(uname -s)-$(uname -m)}" in
+  Darwin-arm64|mac-arm64)  ASSET=pdfium-mac-arm64.tgz;  SHA=336219e80580b93c6523f44db7dc1de59cc497b13a7390ddac84223f68ca162b; LIB=libpdfium.dylib ;;
+  Darwin-x86_64|mac-x64) ASSET=pdfium-mac-x64.tgz;    SHA=841ecac278cdd46288dd065873522cf72f3996560d8978f473d336f01d59942c; LIB=libpdfium.dylib ;;
+  Linux-x86_64|linux-x64)  ASSET=pdfium-linux-x64.tgz;  SHA=0b43f405477cf2cfc4dbff06905093c3309756c6bca1fb9da99234a2ca97fed2; LIB=libpdfium.so ;;
+  *) echo "unsupported platform: ${1:-$(uname -s)-$(uname -m)} (Windows: use fetch-pdfium.ps1)" >&2; exit 1 ;;
 esac
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENDOR="$ROOT/vendor/pdfium"
