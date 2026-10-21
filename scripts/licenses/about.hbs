@@ -1,29 +1,29 @@
 ## Rust dependencies
 
 Generated with `cargo about` for the `omnimark-app` crate (Windows, Linux and macOS targets,
-production dependencies only). Crates are grouped by license; each full license text appears once.
+production dependencies only). Crates are grouped by license; each license text appears once. Copyright notices of each crate are in its published source on crates.io.
 
 ### Licenses in use
 
 {{#each overview}}
-- [{{name}}](#{{id}}) ({{count}} crates)
+- [{{{name}}}](#{{id}}) ({{count}} crates)
 {{/each}}
 
 {{#each licenses}}
 <a id="{{id}}"></a>
 
-#### {{name}}
+#### {{{name}}}
 
 Used by:
 
 {{#each used_by}}
-- [{{crate.name}} {{crate.version}}]({{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}})
+- [{{{crate.name}}} {{crate.version}}]({{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}})
 {{/each}}
 
 <details><summary>License text</summary>
 
 ```text
-{{text}}
+{{{text}}}
 ```
 
 </details>

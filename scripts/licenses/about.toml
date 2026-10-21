@@ -17,6 +17,7 @@ accepted = [
     "0BSD",
     "OpenSSL",
     "MPL-2.0",
+    "CDLA-Permissive-2.0",
 ]
 targets = [
     "x86_64-pc-windows-msvc",
@@ -27,3 +28,10 @@ targets = [
 ignore-dev-dependencies = true
 ignore-build-dependencies = true
 workarounds = ["ring"]
+
+# nom-exif ships a license-file instead of an SPDX field; its LICENSE is MIT.
+[nom-exif.clarify]
+license = "MIT"
+[[nom-exif.clarify.files]]
+path = "LICENSE"
+checksum = "9cfbbedc535b1a4b73b2f7f51fd683ac6cae914f6d4bc7f271b9b230dd4e2808"
