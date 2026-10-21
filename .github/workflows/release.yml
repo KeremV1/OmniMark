@@ -1,9 +1,9 @@
 name: Release
-# A v* tag builds every platform and uploads the packages to a DRAFT release (named "beta"); the draft is
+# Builds every platform and uploads the packages to a DRAFT release (named "beta"); the draft is
 # published by hand after a smoke test. workflow_dispatch builds the version in tauri.conf.json.
 on:
-  push:
-    tags: ['v*']
+  # Started by hand (Actions > Release > Run workflow). Publishing the draft creates the tag, so a
+  # tag trigger would start a second, failing run.
   workflow_dispatch:
 
 permissions:
