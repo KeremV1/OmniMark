@@ -108,7 +108,8 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
         with:
           releaseId: ${{ needs.draft.outputs.release_id }}
-          tagName: v__VERSION__
+          # An explicit tag: with releaseId, __VERSION__ is not substituted in latest.json URLs.
+          tagName: v${{ needs.draft.outputs.version }}
           releaseName: OmniMark v__VERSION__ (beta)
           releaseDraft: true
           # Not a GitHub pre-release: /releases/latest (the updater endpoint) skips pre-releases.
