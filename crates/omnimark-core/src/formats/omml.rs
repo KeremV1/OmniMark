@@ -1,5 +1,5 @@
-//! Office Math (OMML) → LaTeX. Behavior follows MarkItDown 0.1.8 (dwml port) with the
-//! improvements listed in `docs/research/markitdown-davranis-spec.md` §3.4.
+//! Office Math (OMML) → LaTeX. Behavior follows MarkItDown 0.1.8 (dwml port), with a few
+//! improvements (see `tests/golden/overrides.md`).
 
 mod latex_table;
 

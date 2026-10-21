@@ -13,9 +13,11 @@ src-tauri/gen/schemas/
 Thumbs.db
 *.log
 
-# Agent workspaces
+# Local-only working folders
 .worktrees/
-.superpowers/
+.internal/
+/CLAUDE.md
+/.claude/
 
 # Downloaded native libraries
 vendor/

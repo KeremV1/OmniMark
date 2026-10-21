@@ -1,11 +1,11 @@
 name: CI
 on:
   push:
-    branches: [main, m1, 'm1-*', m2, 'm2-*', 'm2/*']
+    branches: [main]
     # Documentation-only pushes do not need a build (macOS minutes count 10x on private repos).
-    paths-ignore: ['**.md', 'docs/**', '.claude/**', 'design/**', 'LICENSE']
+    paths-ignore: ['**.md', 'docs/**', 'design/**', 'LICENSE']
   pull_request:
-    paths-ignore: ['**.md', 'docs/**', '.claude/**', 'design/**', 'LICENSE']
+    paths-ignore: ['**.md', 'docs/**', 'design/**', 'LICENSE']
 # A newer push to the same branch supersedes the running check.
 concurrency:
   group: ci-${{ github.ref }}

@@ -1,4 +1,4 @@
-//! OCR quality spike (Task M2-3): character error rate (CER) and time of each available engine
+//! OCR quality measurement: character error rate (CER) and time of each available engine
 //! (Windows, ocrs) on
 //! generated Turkish/English text and on the page image of `pdf_scanned_minimal.pdf`. Manual:
 //! `cargo test -p omnimark-core --release --features ocr,ocr-windows ocr::quality -- --ignored --nocapture`
@@ -121,7 +121,7 @@ fn cer_counts_edits_per_reference_character() {
 }
 
 #[test]
-#[ignore = "manual quality measurement (Task M2-3); results in docs/m2-ocr-kalite.md"]
+#[ignore = "manual quality measurement; prints a table"]
 fn measure_ocr_quality() {
     let font = system_font().expect("a system font (or OMNIMARK_TEST_FONT)");
     let mut cases: Vec<(String, &str, OcrLanguage, String, OcrImage)> = Vec::new();

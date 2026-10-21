@@ -139,7 +139,7 @@ fn text_box_paragraphs_follow_their_host_paragraph() {
 
 #[test]
 fn failing_equation_is_kept_as_plain_text_with_a_warning() {
-    // Before Task 11 omml_to_latex always errors; this holds for both stub and real behavior.
+    // An equation that cannot be converted is kept as text (or as trivial LaTeX).
     let md = render(&p(r#"<m:oMath><m:r><m:t>x</m:t></m:r></m:oMath>"#));
     assert!(md == "x" || md == "$x$", "{md}");
 }
