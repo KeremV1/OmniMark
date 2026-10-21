@@ -12,8 +12,8 @@ import type { ConvertEvent, DownloadEvent, FileEntry, OcrStatus, Settings } from
 import { isLang } from './i18n';
 import type { Actions } from './ui/context';
 
-const DIR = 'C:\\Users\\Kerem\\Documents\\Raporlar';
-const OUT = 'C:\\Users\\Kerem\\Documents\\OmniMark';
+const DIR = 'C:\\Users\\alex\\Documents\\Reports';
+const OUT = 'C:\\Users\\alex\\Documents\\OmniMark';
 
 const SAMPLES: FileEntry[] = [
   { path: `${DIR}\\Yıllık rapor 2026.pdf`, name: 'Yıllık rapor 2026.pdf', kind: 'pdf', size: 2_516_582, supported: true },
@@ -194,7 +194,7 @@ export function installDevMock(): void {
         case 'plugin:app|version':
           return '0.1.0';
         case 'plugin:dialog|open':
-          return (args.options as { directory?: boolean })?.directory ? 'C:\\Users\\Kerem\\Desktop\\Markdown' : SAMPLES.map((s) => s.path);
+          return (args.options as { directory?: boolean })?.directory ? 'C:\\Users\\alex\\Desktop\\Markdown' : SAMPLES.map((s) => s.path);
         default:
           return null;
       }

@@ -41,7 +41,7 @@ describe('preview markdown', () => {
   });
 
   it('shortens long output paths to their last folders', () => {
-    expect(shortPath('C:\\Users\\Kerem\\Documents\\OmniMark')).toBe('…\\Documents\\OmniMark');
+    expect(shortPath('C:\\Users\\alex\\Documents\\OmniMark')).toBe('…\\Documents\\OmniMark');
     expect(shortPath('/home/k/OmniMark')).toBe('/home/k/OmniMark');
     expect(dirName('/home/k/a.md')).toBe('/home/k');
   });

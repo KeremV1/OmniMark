@@ -58,7 +58,7 @@ export function dirName(path: string): string {
   return i > 0 ? path.slice(0, i) : path;
 }
 
-/** `C:\Users\Kerem\Documents\OmniMark` → `…\Documents\OmniMark`. */
+/** `C:\Users\alex\Documents\OmniMark` → `…\Documents\OmniMark`. */
 export function shortPath(path: string, keep = 2): string {
   const sep = separatorOf(path);
   const parts = path.split(/[\\/]/).filter((p) => p.length > 0);
