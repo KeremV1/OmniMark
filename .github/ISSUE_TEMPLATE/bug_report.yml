@@ -1,0 +1,80 @@
+name: Bug report
+description: Something did not convert correctly, crashed, or behaved unexpectedly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! OmniMark runs fully offline and never uploads your files.
+        **Do not attach documents that contain private information.** A small file that reproduces the problem is ideal.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (AppImage)
+        - Linux (.deb)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OmniMark version
+      description: Shown in Settings > About (for example 0.2.0).
+    validations:
+      required: true
+  - type: dropdown
+    id: filetype
+    attributes:
+      label: File type
+      options:
+        - PDF
+        - DOCX
+        - XLSX
+        - PPTX
+        - HTML
+        - Image (OCR)
+        - CSV / text / JSON / XML
+        - ZIP
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Drop the file into the window
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the Markdown that was produced, or a screenshot, if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: |
+        Log files are stored in:
+        - Windows: `%LOCALAPPDATA%\io.github.keremv1.omnimark\logs`
+        - macOS: `~/Library/Logs/io.github.keremv1.omnimark`
+        - Linux: `~/.local/share/io.github.keremv1.omnimark/logs`
+
+        Paste the relevant lines (check them for personal paths first).
+      render: text
