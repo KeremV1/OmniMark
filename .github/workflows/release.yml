@@ -105,6 +105,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Ad-hoc signature: Apple silicon refuses to run a completely unsigned app. This is not
           # a Developer ID signature, so Gatekeeper still warns (README explains how to open it).
+          # The Hardened Runtime is off (tauri.macos.conf.json): without notarization it adds
+          # nothing, and its library validation would reject the ad-hoc signed pdfium.
           APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
         with:
           releaseId: ${{ needs.draft.outputs.release_id }}
@@ -117,6 +119,20 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+      - name: Check macOS code signatures
+        # A library macOS will not load only shows up when a PDF is opened, so check the bundle
+        # here: pdfium must carry a signature and the app must not use the Hardened Runtime.
+        if: runner.os == 'macOS'
+        run: |
+          app="target/${{ matrix.target }}/release/bundle/macos/OmniMark.app"
+          lib="${app}/Contents/Resources/pdfium/libpdfium.dylib"
+          codesign --verify --strict --verbose=2 "${lib}"
+          codesign --verify --deep --strict --verbose=2 "${app}"
+          if codesign -dv "${app}" 2>&1 | grep -q '(runtime)'; then
+            echo "the app is signed with the Hardened Runtime; ad-hoc signed pdfium will not load" >&2
+            exit 1
+          fi
+          lipo -info "${lib}"
 
   verify:
     # latest.json is merged by every platform job; check that no platform was lost to a race.
