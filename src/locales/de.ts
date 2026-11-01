@@ -53,7 +53,7 @@ const de: Messages = {
   'error.tooLarge': 'Die Datei ist zu groß.',
   'error.cancelled': 'Der Vorgang wurde abgebrochen.',
   'error.io': 'Die Datei konnte nicht gelesen oder geschrieben werden.',
-  'error.missingComponent': 'Eine erforderliche Komponente fehlt.',
+  'error.missingComponent': 'Eine erforderliche Komponente fehlt oder konnte nicht geladen werden.',
   'error.busy': 'Es läuft bereits eine andere Konvertierung.',
   'error.invalidPath': 'Ungültiger Dateipfad.',
   'action.save': 'Speichern',

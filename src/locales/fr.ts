@@ -53,7 +53,7 @@ const fr: Messages = {
   'error.tooLarge': 'Le fichier est trop volumineux.',
   'error.cancelled': 'L’opération a été annulée.',
   'error.io': 'Le fichier n’a pas pu être lu ou écrit.',
-  'error.missingComponent': 'Un composant requis est manquant.',
+  'error.missingComponent': 'Un composant requis est manquant ou n’a pas pu être chargé.',
   'error.busy': 'Une autre conversion est déjà en cours.',
   'error.invalidPath': 'Chemin de fichier non valide.',
   'action.save': 'Enregistrer',

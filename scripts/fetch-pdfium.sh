@@ -12,12 +12,22 @@ case "${1:-$(uname -s)-$(uname -m)}" in
 esac
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENDOR="$ROOT/vendor/pdfium"
-if [ -f "$VENDOR/$LIB" ]; then echo "pdfium already present: $VENDOR/$LIB"; exit 0; fi
-mkdir -p "$VENDOR"
-curl -fsSL -o "$VENDOR/$ASSET" "https://github.com/bblanchon/pdfium-binaries/releases/download/$TAG/$ASSET"
-if command -v sha256sum >/dev/null; then ACTUAL=$(sha256sum "$VENDOR/$ASSET" | cut -d' ' -f1); else ACTUAL=$(shasum -a 256 "$VENDOR/$ASSET" | cut -d' ' -f1); fi
-if [ "$ACTUAL" != "$SHA" ]; then rm -f "$VENDOR/$ASSET"; echo "SHA-256 mismatch for $ASSET: $ACTUAL" >&2; exit 1; fi
-tar -xzf "$VENDOR/$ASSET" -C "$VENDOR"
-cp "$VENDOR/lib/$LIB" "$VENDOR/$LIB"
-rm "$VENDOR/$ASSET"
+if [ -f "$VENDOR/$LIB" ]; then
+  echo "pdfium already present: $VENDOR/$LIB"
+else
+  mkdir -p "$VENDOR"
+  curl -fsSL -o "$VENDOR/$ASSET" "https://github.com/bblanchon/pdfium-binaries/releases/download/$TAG/$ASSET"
+  if command -v sha256sum >/dev/null; then ACTUAL=$(sha256sum "$VENDOR/$ASSET" | cut -d' ' -f1); else ACTUAL=$(shasum -a 256 "$VENDOR/$ASSET" | cut -d' ' -f1); fi
+  if [ "$ACTUAL" != "$SHA" ]; then rm -f "$VENDOR/$ASSET"; echo "SHA-256 mismatch for $ASSET: $ACTUAL" >&2; exit 1; fi
+  tar -xzf "$VENDOR/$ASSET" -C "$VENDOR"
+  cp "$VENDOR/lib/$LIB" "$VENDOR/$LIB"
+  rm "$VENDOR/$ASSET"
+fi
+# The upstream macOS libraries are unsigned (the x64 one has no signature at all), and macOS
+# refuses to load unsigned code into a signed app. Ad-hoc sign it on every run so an older
+# vendor/ copy is fixed too; the bundler copies the file as a resource and keeps the signature.
+if [ "$LIB" = libpdfium.dylib ]; then
+  codesign --force --sign - "$VENDOR/$LIB"
+  codesign --verify --strict "$VENDOR/$LIB"
+fi
 echo "pdfium ready: $VENDOR/$LIB"

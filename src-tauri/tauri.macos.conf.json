@@ -1,1 +1,6 @@
-{ "bundle": { "resources": { "../vendor/pdfium/libpdfium.dylib": "pdfium/libpdfium.dylib" } } }
+{
+  "bundle": {
+    "resources": { "../vendor/pdfium/libpdfium.dylib": "pdfium/libpdfium.dylib" },
+    "macOS": { "hardenedRuntime": false }
+  }
+}

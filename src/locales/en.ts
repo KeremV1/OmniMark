@@ -52,7 +52,7 @@ export const en = {
   'error.tooLarge': 'The file is too large.',
   'error.cancelled': 'The operation was cancelled.',
   'error.io': 'The file could not be read or written.',
-  'error.missingComponent': 'A required component is missing.',
+  'error.missingComponent': 'A required component is missing or could not be loaded.',
   'error.busy': 'Another conversion is already running.',
   'error.invalidPath': 'Invalid file path.',
   'action.save': 'Save',

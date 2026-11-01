@@ -53,7 +53,7 @@ const ru: Messages = {
   'error.tooLarge': 'Файл слишком большой.',
   'error.cancelled': 'Операция отменена.',
   'error.io': 'Не удалось прочитать или записать файл.',
-  'error.missingComponent': 'Отсутствует необходимый компонент.',
+  'error.missingComponent': 'Необходимый компонент отсутствует или не загрузился.',
   'error.busy': 'Другое преобразование уже выполняется.',
   'error.invalidPath': 'Недопустимый путь к файлу.',
   'action.save': 'Сохранить',

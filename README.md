@@ -21,7 +21,7 @@
 
 **OmniMark** converts documents, spreadsheets, slides, web pages, images and ZIP archives into clean Markdown (`.md`). Everything runs on your computer and no file is ever uploaded. It is written in Rust with a Tauri 2 shell, so it opens fast, the installer is about 7 MB and it idles at about 70 MB of memory.
 
-> **Beta (v0.2.0).** OmniMark is usable today and we are looking for feedback. The installers are not code-signed yet, so your system will show a warning the first time; see [Installation](#installation). Please [open an issue](https://github.com/KeremV1/OmniMark/issues/new/choose) for bugs, wrong output or ideas.
+> **Beta (v0.2.1).** OmniMark is usable today and we are looking for feedback. The installers are not code-signed yet, so your system will show a warning the first time; see [Installation](#installation). Please [open an issue](https://github.com/KeremV1/OmniMark/issues/new/choose) for bugs, wrong output or ideas.
 
 ## Download
 
@@ -34,7 +34,7 @@ Get the latest version from **[Releases](https://github.com/KeremV1/OmniMark/rel
 | macOS, Intel | `OmniMark_<version>_x64.dmg` |
 | Linux x64 (Ubuntu 22.04+ and similar) | `OmniMark_<version>_amd64.AppImage` or `.deb` |
 
-The app checks for new versions at startup and offers to install them; nothing is installed without your click. You can turn the check off in **Settings**.
+The app checks for new versions at startup and offers to install them; nothing is installed without your click. You can turn the check off in **Settings**. What changed in each version is in the [changelog](CHANGELOG.md).
 
 ## Highlights
 
