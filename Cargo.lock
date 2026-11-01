@@ -3023,7 +3023,7 @@ dependencies = [
 
 [[package]]
 name = "omnimark-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "log",
  "omnimark-core",
@@ -3046,7 +3046,7 @@ dependencies = [
 
 [[package]]
 name = "omnimark-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "omnimark-core",
@@ -3056,7 +3056,7 @@ dependencies = [
 
 [[package]]
 name = "omnimark-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ab_glyph",
  "calamine",
