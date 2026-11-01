@@ -53,7 +53,7 @@ const es: Messages = {
   'error.tooLarge': 'El archivo es demasiado grande.',
   'error.cancelled': 'La operación se canceló.',
   'error.io': 'No se pudo leer o escribir el archivo.',
-  'error.missingComponent': 'Falta un componente necesario.',
+  'error.missingComponent': 'Falta un componente necesario o no se pudo cargar.',
   'error.busy': 'Ya hay otra conversión en curso.',
   'error.invalidPath': 'Ruta de archivo no válida.',
   'action.save': 'Guardar',

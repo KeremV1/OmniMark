@@ -53,7 +53,7 @@ const ptBR: Messages = {
   'error.tooLarge': 'O arquivo é grande demais.',
   'error.cancelled': 'A operação foi cancelada.',
   'error.io': 'Não foi possível ler ou gravar o arquivo.',
-  'error.missingComponent': 'Falta um componente necessário.',
+  'error.missingComponent': 'Falta um componente necessário ou ele não pôde ser carregado.',
   'error.busy': 'Outra conversão já está em andamento.',
   'error.invalidPath': 'Caminho de arquivo inválido.',
   'action.save': 'Salvar',

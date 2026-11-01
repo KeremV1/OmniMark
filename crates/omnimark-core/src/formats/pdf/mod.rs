@@ -178,8 +178,12 @@ fn extract_round(
     #[cfg(test)]
     let _held = HeldFlag::set();
     if guard.is_none() {
-        let bindings = Pdfium::bind_to_library(library)
-            .map_err(|e| ConvertError::MissingComponent(format!("{}: {e}", library.display())))?;
+        let bindings = Pdfium::bind_to_library(library).map_err(|e| {
+            ConvertError::MissingComponent(format!(
+                "pdfium library at {} could not be loaded: {e}",
+                library.display()
+            ))
+        })?;
         *guard = Some(Pdfium::new(bindings));
     }
     let pdfium = guard.as_ref().expect("pdfium bound above");

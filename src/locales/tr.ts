@@ -53,7 +53,7 @@ const tr: Messages = {
   'error.tooLarge': 'Dosya çok büyük.',
   'error.cancelled': 'İşlem iptal edildi.',
   'error.io': 'Dosya okunamadı veya yazılamadı.',
-  'error.missingComponent': 'Gerekli bileşen eksik.',
+  'error.missingComponent': 'Gerekli bir bileşen eksik ya da yüklenemedi.',
   'error.busy': 'Başka bir dönüşüm sürüyor.',
   'error.invalidPath': 'Geçersiz dosya yolu.',
   'action.save': 'Kaydet',
